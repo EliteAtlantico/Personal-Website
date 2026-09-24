@@ -6,10 +6,11 @@ import type { Site } from '../content/types'
 import { renderArticle, renderNotFound } from './article'
 import { renderFront } from './front'
 import { esc } from './html'
-import { findItem, itemPath, normalizePath } from './paths'
+import { findItem, itemPath, normalizePath, VIEW_PATHS } from './paths'
+import { renderTerminal } from './terminal'
 
 export interface Page {
-  kind: 'front' | 'article' | 'notfound'
+  kind: 'front' | 'terminal' | 'article' | 'notfound'
   status: number
   title: string
   description: string
@@ -31,6 +32,16 @@ export function renderPage(site: Site, pathname: string): Page {
     }
   }
 
+  if (path === '/terminal') {
+    return {
+      kind: 'terminal',
+      status: 200,
+      title: `Terminal | ${author}`,
+      description: `${author}'s site as a shell: ls, cat and open every story, or grep them all.`,
+      html: wrap('terminal', renderTerminal(site)),
+    }
+  }
+
   const item = findItem(site, path)
   if (item) {
     return {
@@ -47,7 +58,7 @@ export function renderPage(site: Site, pathname: string): Page {
 }
 
 /** Every URL the prerender step should write to disk. */
-export const routes = (site: Site) => ['/', ...site.items.map(itemPath)]
+export const routes = (site: Site) => [...VIEW_PATHS, ...site.items.map(itemPath)]
 
 /** Fills the <!--app-head--> and <!--app-html--> placeholders in index.html. */
 export function injectPage(template: string, page: Page) {

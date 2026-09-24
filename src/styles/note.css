@@ -1,0 +1,223 @@
+/* Personalizing, said out loud (src/ui/note.ts): the editor's note under the
+   front page's masthead, and the panel listing everything the browser shared. */
+
+.note {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: baseline;
+  gap: 4px 18px;
+  max-width: var(--page);
+  margin: 0 auto;
+  padding: 12px var(--gutter) 0;
+  text-align: center;
+}
+
+.note__text {
+  max-width: 88ch;
+  margin: 0;
+  color: var(--ink-2);
+  font: italic 400 1rem/1.5 var(--font-text);
+  text-wrap: balance;
+}
+
+.note__kicker {
+  margin-right: 6px;
+  color: var(--accent);
+  font: normal 500 11px/1 var(--font-mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.note__hello {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.note__text a {
+  color: var(--accent);
+}
+
+.note__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px 16px;
+  margin: 0;
+}
+
+.note__actions button,
+.signals__controls button {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink-3);
+  font: 500 11px/1.6 var(--font-mono);
+  letter-spacing: 0.08em;
+  text-decoration: underline dotted;
+  text-transform: uppercase;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.note__actions button:hover,
+.signals__controls button:hover {
+  color: var(--accent);
+  text-decoration-style: solid;
+}
+
+/* --- The panel: everything the browser shared --- */
+
+.signals {
+  width: min(760px, calc(100vw - 32px));
+  max-height: min(88vh, 920px);
+  padding: 28px 32px 24px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 4px;
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: 0 30px 80px rgb(0 0 0 / 0.35);
+}
+
+.signals::backdrop {
+  background: rgb(0 0 0 / 0.5);
+}
+
+.signals__close {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  margin: 0;
+}
+
+.signals__close button {
+  padding: 4px 10px;
+  border: 0;
+  background: none;
+  color: var(--ink-3);
+  font: 400 24px/1 var(--font-text);
+  cursor: pointer;
+}
+
+.signals__close button:hover {
+  color: var(--accent);
+}
+
+.signals__title {
+  margin: 0 32px 8px 0;
+  font: 700 1.7rem/1.15 var(--font-display);
+  letter-spacing: -0.01em;
+}
+
+.signals__lede {
+  max-width: 64ch;
+  margin: 0 0 20px;
+  color: var(--ink-2);
+  font: 400 1rem/1.5 var(--font-text);
+}
+
+.signals__lede strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.signals__groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+  gap: 20px 32px;
+}
+
+.signals h3 {
+  margin: 0 0 8px;
+  color: var(--accent);
+  font: 500 11px/1.3 var(--font-mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.signals dl {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 4px 14px;
+  margin: 0;
+}
+
+.signals dt {
+  color: var(--ink-3);
+  font: 500 11px/1.75 var(--font-mono);
+  letter-spacing: 0.04em;
+}
+
+.signals dd {
+  margin: 0;
+  font: 400 0.95rem/1.4 var(--font-text);
+  overflow-wrap: anywhere;
+}
+
+.signals__changed {
+  margin-top: 22px;
+  padding-top: 16px;
+  border-top: 1px solid var(--rule);
+}
+
+.signals__changed ul,
+.signals__changed p {
+  margin: 0;
+  font: 400 1rem/1.5 var(--font-text);
+}
+
+.signals__changed ul {
+  padding-left: 1.1em;
+}
+
+.signals__changed li::marker {
+  color: var(--accent);
+}
+
+.signals__controls {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px 24px;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--rule);
+}
+
+.signals__controls label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font: 400 1rem/1.4 var(--font-text);
+  cursor: pointer;
+}
+
+.signals__controls label span {
+  color: var(--ink-3);
+  font-size: 0.9rem;
+}
+
+.signals__controls input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.signals__more {
+  margin: 16px 0 0;
+  color: var(--ink-3);
+  font: 400 0.92rem/1.5 var(--font-text);
+}
+
+.signals__more a {
+  color: var(--accent);
+}
+
+@media (max-width: 560px) {
+  .signals {
+    padding: 22px 18px 18px;
+  }
+}

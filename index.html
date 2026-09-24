@@ -7,8 +7,10 @@
     <!--app-head-->
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
     <!-- "js": the banner photo is only ever shown as type, so hide it from the first paint.
-         "pt-pending": hide the page for the moment it takes pretext to lay it out (never longer than 2s, and never without JS). -->
-    <script>document.documentElement.classList.add('js','pt-pending');setTimeout(function(){document.documentElement.classList.remove('pt-pending')},2000)</script>
+         "pt-pending": hide the page for the moment it takes pretext to lay it out (never longer than 2s, and never without JS).
+         "pt-view": on the front page, someone who might be a developer (Linux, Firefox, a link from GitHub, ?via=dev,
+         or they picked the terminal before) may be switched to the terminal (src/signals), so nothing shows until that's decided. -->
+    <script>(function(d,n){d.classList.add('js','pt-pending');try{var p=JSON.parse(localStorage.getItem('kc:prefs')||'{}'),q=new URLSearchParams(location.search),u=n.userAgent;if(location.pathname=='/'&&(p.view=='terminal'||p.view!='paper'&&p.personalize!==false&&!n.globalPrivacyControl&&n.doNotTrack!='1'&&(/Linux|X11|Firefox\//.test(u)&&!/Android/.test(u)||/github|gitlab|codeberg|ycombinator|lobste\.rs|stackoverflow|stackexchange|dev\.to/.test(document.referrer)||q.get('via')=='dev'||q.has('debug'))))d.classList.add('pt-view')}catch(e){}setTimeout(function(){d.classList.remove('pt-pending','pt-view')},2000)})(document.documentElement,navigator)</script>
     <script type="module" src="/src/main.ts"></script>
   </head>
   <body>

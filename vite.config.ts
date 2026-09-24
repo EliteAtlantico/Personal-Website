@@ -49,6 +49,13 @@ function content(): Plugin {
         server.ws.send({ type: 'full-reload' })
       })
 
+      // What Cloudflare sees of a visitor (city, network) comes from the edge worker in production
+      // (stage 6). Here there's nothing to see; ?debug&city=…&org=… stands in for it.
+      server.middlewares.use('/api/visitor', (_req, res) => {
+        res.setHeader('Content-Type', 'application/json')
+        res.end('{}')
+      })
+
       // Photos and videos straight from content/media/ (the build makes resized copies instead).
       server.middlewares.use('/media', (req, res, next) => {
         const file = path.join(MEDIA_DIR, decodeURIComponent((req.url ?? '/').split('?')[0]!))

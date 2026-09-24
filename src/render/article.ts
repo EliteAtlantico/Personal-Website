@@ -1,5 +1,6 @@
 // A full story page: headline, fact box (the part recruiters scan), media,
 // the Markdown deep-dive, and related stories chosen by shared tags.
+import { relatedItems } from '../content/related'
 import type { Item, Media, Site } from '../content/types'
 import { footer, masthead } from './chrome'
 import { esc, join } from './html'
@@ -98,18 +99,10 @@ function mediaBlock(media: Media) {
 }
 
 function related(site: Site, item: Item) {
-  const picks = site.items
-    .filter((other) => other.slug !== item.slug && other.section !== 'now' && (other.section !== 'hobbies' || item.section === 'hobbies'))
-    .map((other) => ({
-      other,
-      score: other.tags.filter((tag) => item.tags.includes(tag)).length * 2 + (other.section === item.section ? 1 : 0),
-    }))
-    .filter(({ score }) => score > 0)
-    .sort((a, b) => b.score - a.score || a.other.slug.localeCompare(b.other.slug))
-    .slice(0, 3)
+  const picks = relatedItems(site, item)
   if (!picks.length) return ''
   return `<section class="related desk" aria-labelledby="related-h">
   <h2 class="desk__name" id="related-h">Related stories</h2>
-  <div class="desk__stories"><div class="desk__grid">${picks.map(({ other }) => tile(site, other)).join('')}</div></div>
+  <div class="desk__stories"><div class="desk__grid">${picks.map((other) => tile(site, other)).join('')}</div></div>
 </section>`
 }

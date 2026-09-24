@@ -25,7 +25,7 @@ export function renderFront(site: Site) {
   const leftovers = site.items.filter((item) => !used.has(item.slug))
   if (leftovers.length) desks.push({ desk: { name: 'More', items: [] }, items: leftovers })
 
-  return `${masthead(site, 'full')}
+  return `${masthead(site, 'full', 'paper')}
 <main id="main" class="front">
   ${lead ? `<section class="lead" aria-label="Top stories">
     ${tile(site, lead, 'lead', 2)}

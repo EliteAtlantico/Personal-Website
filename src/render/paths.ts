@@ -16,6 +16,9 @@ export const findItem = (site: Site, pathname: string) => {
   return site.items.find((item) => itemPath(item) === path)
 }
 
-export const isRoute = (site: Site, pathname: string) => normalizePath(pathname) === '/' || findItem(site, pathname) !== undefined
+/** Pages that aren't stories: the front page and the other views of it. */
+export const VIEW_PATHS = ['/', '/terminal']
+
+export const isRoute = (site: Site, pathname: string) => VIEW_PATHS.includes(normalizePath(pathname)) || findItem(site, pathname) !== undefined
 
 export const deskName = (site: Site, item: Item) => item.desk ?? site.config.sectionNames[item.section]

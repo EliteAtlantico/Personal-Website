@@ -15,7 +15,8 @@
 }
 
 /* Set by an inline script, removed once the first layout is done (or after 2s). */
-.pt-pending main {
+.pt-pending main,
+.pt-view #app {
   visibility: hidden;
 }
 

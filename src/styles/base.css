@@ -84,7 +84,7 @@ img {
 }
 
 .stamp--live {
-  color: var(--blueprint);
+  color: var(--leaf);
 }
 
 .stamp--paused {

@@ -1,20 +1,28 @@
-/* Design tokens. Editorial (paper, ink, a newspaper red) plus one technical
-   accent (blueprint blue) for stacks, links and anything "engineering". */
+/* Design tokens, from a palette of orange flowers on dark leaves:
+
+     #00050b black · #0c704e emerald · #709e81 sage
+     #fc8c02 amber · #fc7813 orange · #f4460a flame
+
+   The flowers' orange is the accent (kickers, links, the CN Tower) and the
+   leaves' green is for anything "engineering" (stacks, technical links). At
+   night the palette is used almost as it is, on the paper's own warm black
+   (the terminal gets the palette's black); by day the same colours sit on
+   newsprint, deepened where they'd be too faint to read. */
 :root {
   --paper: #f6f2e9;
-  --paper-2: #ede7d9;
-  --ink: #1b1a17;
-  --ink-2: #47433b;
-  --ink-3: #6e6859;
-  --rule: rgba(27, 26, 23, 0.16);
-  --rule-strong: #1b1a17;
-  --accent: #b3261e;
-  --blueprint: #1f5fa8;
-  --chip: rgba(31, 95, 168, 0.08);
-  --focus: #1f5fa8;
-  --draft: #9a6700;
-  --chip-body: #1b1a17;
-  --chip-ink: #f4efe3;
+  --paper-2: #e9eadf;
+  --ink: #00050b;
+  --ink-2: #2f453d;
+  --ink-3: #487056;
+  --rule: rgba(0, 5, 11, 0.16);
+  --rule-strong: #00050b;
+  --accent: #ba3408;
+  --leaf: #0c704e;
+  --chip: rgba(12, 112, 78, 0.1);
+  --focus: #0c704e;
+  --draft: #a25a02;
+  --chip-body: #0c704e;
+  --chip-ink: #f6f2e9;
 
   --font-display: 'Fraunces Variable', Georgia, 'Times New Roman', serif;
   --font-text: 'Newsreader Variable', Georgia, 'Times New Roman', serif;
@@ -28,23 +36,23 @@
   color-scheme: light;
 }
 
-/* Ink on newsprint at night. */
+/* The night edition: the palette on warm black. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
     --paper: #13120f;
     --paper-2: #1c1a16;
-    --ink: #ece6d8;
-    --ink-2: #c4bdad;
-    --ink-3: #999283;
-    --rule: rgba(236, 230, 216, 0.16);
-    --rule-strong: #ece6d8;
-    --accent: #ff7a6b;
-    --blueprint: #86b2ff;
-    --chip: rgba(134, 178, 255, 0.1);
-    --focus: #86b2ff;
-    --draft: #e3b341;
-    --chip-body: #2c2a25;
-    --chip-ink: #f1ebdd;
+    --ink: #e8efeb;
+    --ink-2: #c9dacf;
+    --ink-3: #709e81;
+    --rule: rgba(112, 158, 129, 0.24);
+    --rule-strong: #709e81;
+    --accent: #fc7813;
+    --leaf: #30a67f;
+    --chip: rgba(12, 112, 78, 0.28);
+    --focus: #30a67f;
+    --draft: #fc8c02;
+    --chip-body: #0b4633;
+    --chip-ink: #eef3f0;
     color-scheme: dark;
   }
 }
@@ -52,17 +60,17 @@
 :root[data-theme='dark'] {
   --paper: #13120f;
   --paper-2: #1c1a16;
-  --ink: #ece6d8;
-  --ink-2: #c4bdad;
-  --ink-3: #999283;
-  --rule: rgba(236, 230, 216, 0.16);
-  --rule-strong: #ece6d8;
-  --accent: #ff7a6b;
-  --blueprint: #86b2ff;
-  --chip: rgba(134, 178, 255, 0.1);
-  --focus: #86b2ff;
-  --draft: #e3b341;
-  --chip-body: #2c2a25;
-  --chip-ink: #f1ebdd;
+  --ink: #e8efeb;
+  --ink-2: #c9dacf;
+  --ink-3: #709e81;
+  --rule: rgba(112, 158, 129, 0.24);
+  --rule-strong: #709e81;
+  --accent: #fc7813;
+  --leaf: #30a67f;
+  --chip: rgba(12, 112, 78, 0.28);
+  --focus: #30a67f;
+  --draft: #fc8c02;
+  --chip-body: #0b4633;
+  --chip-ink: #eef3f0;
   color-scheme: dark;
 }

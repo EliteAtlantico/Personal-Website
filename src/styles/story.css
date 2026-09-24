@@ -146,7 +146,7 @@
   padding: 6px 8px;
   border-radius: 3px;
   background: var(--chip);
-  color: var(--blueprint);
+  color: var(--leaf);
   font: 500 11px/1.1 var(--font-mono);
 }
 
@@ -158,7 +158,7 @@
 }
 
 .factbox__links a {
-  color: var(--blueprint);
+  color: var(--leaf);
   font: 500 12px/1.4 var(--font-mono);
   letter-spacing: 0.06em;
   text-transform: uppercase;

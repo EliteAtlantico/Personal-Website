@@ -1,12 +1,4 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <style>
-    rect { fill: #1b1a17; }
-    text { fill: #f6f2e9; }
-    @media (prefers-color-scheme: dark) {
-      rect { fill: #f6f2e9; }
-      text { fill: #1b1a17; }
-    }
-  </style>
-  <rect width="64" height="64" rx="12"/>
-  <text x="32" y="46" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="42" font-weight="700">K</text>
+  <rect width="64" height="64" rx="12" fill="#00050b"/>
+  <text x="32" y="46" text-anchor="middle" fill="#fc7813" font-family="Georgia, 'Times New Roman', serif" font-size="42" font-weight="700">K</text>
 </svg>

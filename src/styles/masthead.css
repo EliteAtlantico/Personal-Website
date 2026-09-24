@@ -24,6 +24,37 @@
   gap: 4px 16px;
 }
 
+.masthead__when {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 18px;
+}
+
+/* Paper / Terminal: the current view underlined in the accent colour. */
+.masthead__views {
+  display: flex;
+  gap: 7px;
+  color: var(--ink-3);
+}
+
+.masthead__views a {
+  color: var(--ink-3);
+  text-decoration: none;
+}
+
+.masthead__views a:hover {
+  color: var(--accent);
+}
+
+.masthead__views a[aria-current='page'] {
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-color: var(--accent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 4px;
+}
+
 .masthead__links a {
   text-decoration: none;
 }

@@ -7,11 +7,17 @@ import { layoutHeadlines } from './layout/headlines'
 import { layoutLead } from './layout/lead'
 import { layoutDesks } from './layout/masonry'
 import { layoutPortrait } from './layout/portrait'
+import type { Site } from './content/types'
 import { formatDate } from './render/html'
+import { calm } from './signals'
+import { addNote } from './ui/note'
 
-export async function enhance(page: HTMLElement, signal: AbortSignal) {
+/** `site` is the visitor's edition of it (src/signals), which the terminal lays its dashboard out from. */
+export async function enhance(page: HTMLElement, signal: AbortSignal, site: Site) {
   // The prerendered masthead carries the build date; show the visitor's own date instead.
   for (const el of page.querySelectorAll<HTMLElement>('[data-today]')) el.textContent = formatDate(new Date().toISOString())
+  // What personalizing noticed and changed, under the front page's masthead.
+  if (page.classList.contains('page--front')) addNote(page, signal)
   videoFacades(page)
   coverVideos(page, signal)
 
@@ -28,6 +34,17 @@ export async function enhance(page: HTMLElement, signal: AbortSignal) {
   } else {
     // No pretext layout, so no typographic banner: show the photo itself.
     page.querySelector('.masthead__banner')?.classList.add('is-photo')
+  }
+
+  // The terminal view's shell is its own chunk, fetched only when someone opens it.
+  const terminal = page.querySelector<HTMLElement>('.terminal')
+  if (terminal && !signal.aborted) {
+    try {
+      const { mountTerminal } = await import('./terminal')
+      if (!signal.aborted) mountTerminal(terminal, signal, site)
+    } catch (error) {
+      console.error(error)
+    }
   }
   page.querySelector('main')?.setAttribute('data-laid-out', '')
 }
@@ -48,10 +65,10 @@ function videoFacades(page: HTMLElement) {
   }
 }
 
-/** Cover videos loop silently while on screen, unless the visitor prefers reduced motion. */
+/** Cover videos loop silently while on screen, unless the page should keep still (reduced motion, low battery, Save-Data). */
 function coverVideos(page: HTMLElement, signal: AbortSignal) {
   const videos = [...page.querySelectorAll<HTMLVideoElement>('video[data-autoplay]')]
-  if (!videos.length || matchMedia('(prefers-reduced-motion: reduce)').matches) return
+  if (!videos.length || calm()) return
   const observer = new IntersectionObserver((entries) => {
     for (const entry of entries) {
       const video = entry.target as HTMLVideoElement
