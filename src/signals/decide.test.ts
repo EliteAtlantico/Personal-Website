@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { loadSite } from '../content/load'
 import { firstDesk, personalizeSite } from './apply'
-import type { Signals } from './collect'
+import { plainName, type Signals } from './collect'
 import { decide } from './decide'
 import { changes, facts, note } from './words'
 
@@ -161,5 +161,18 @@ describe('reading the device', () => {
     expect([osOf(edgeWindows), browserOf(edgeWindows)]).toEqual(['Windows', ['Edge', '130']])
     expect(browserOf(safariMac)).toEqual(['Safari', '18'])
     expect(osOf('Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 Chrome/130 Mobile Safari/537.36')).toBe('Android')
+  })
+})
+
+describe('names from outside the site (a network, a city, ?debug)', () => {
+  test('real names come through as they are', () => {
+    for (const name of ['University of Toronto', 'AT&T Services, Inc.', "O'Reilly Media", 'Montréal', 'Kuwait City', '7-Eleven']) expect(plainName(name)).toBe(name)
+  })
+
+  test("a link can't use one to put a message, markup or an address on the page", () => {
+    expect(plainName('<img src=x onerror=alert(1)>')).toBe('img src x onerror alert(1)')
+    expect(plainName('Log in at evil.example to unlock your account')).not.toContain('evil.example')
+    expect(plainName('x'.repeat(200))!.length).toBeLessThanOrEqual(48)
+    expect(plainName('   ')).toBeUndefined()
   })
 })

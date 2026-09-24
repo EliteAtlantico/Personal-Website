@@ -19,6 +19,7 @@ import { readdir, readFile, stat } from 'node:fs/promises'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import os from 'node:os'
 import path from 'node:path'
+import { SECURITY } from './headers'
 
 const TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -43,13 +44,7 @@ const TYPES: Record<string, string> = {
   '.xml': 'application/xml; charset=utf-8',
 }
 
-/** Sent with everything (the Worker sends the same, for its copy). */
-export const SECURITY: Record<string, string> = {
-  'x-content-type-options': 'nosniff',
-  'referrer-policy': 'strict-origin-when-cross-origin',
-  'x-frame-options': 'DENY',
-  'permissions-policy': 'camera=(), microphone=(), geolocation=(), interest-cohort=()',
-}
+export { SECURITY } from './headers'
 
 export interface Desk {
   live: true
@@ -123,10 +118,11 @@ async function catalog(root: string): Promise<Map<string, Entry>> {
     for (const entry of await readdir(dir, { withFileTypes: true })) {
       const file = path.join(dir, entry.name)
       if (entry.isDirectory()) {
-        await walk(file)
+        if (!entry.name.startsWith('.')) await walk(file)
         continue
       }
-      if (!entry.isFile() || /\.(br|gz)$/.test(entry.name)) continue
+      // Not the compressed copies (they're sent in place of their files), hidden files, or source maps.
+      if (!entry.isFile() || /\.(br|gz|map)$/.test(entry.name) || entry.name.startsWith('.')) continue
       const type = TYPES[path.extname(file).toLowerCase()] ?? 'application/octet-stream'
       const key = `/${path.relative(root, file).split(path.sep).join('/')}`
       // Vite names what's in assets/ by its contents, so those can be kept a year; pages are checked every time.
@@ -146,6 +142,8 @@ async function catalog(root: string): Promise<Map<string, Entry>> {
 async function respond(files: Map<string, Entry>, desk: () => Promise<Desk>, req: IncomingMessage, res: ServerResponse) {
   const url = new URL(req.url ?? '/', 'http://desk')
   const head = req.method === 'HEAD'
+  // Node takes a request line without a version as HTTP/0.9, and reads on; nothing real speaks that.
+  if (req.httpVersionMajor !== 1) return send(res, 505, { 'content-type': 'text/plain; charset=utf-8', connection: 'close' }, 'HTTP/1.1 only.')
   if (req.method !== 'GET' && !head) return send(res, 405, { allow: 'GET, HEAD', 'content-type': 'text/plain; charset=utf-8' }, 'Only GET and HEAD.')
 
   if (url.pathname === '/api/desk') {
@@ -171,10 +169,13 @@ async function respond(files: Map<string, Entry>, desk: () => Promise<Desk>, req
 
 /** The clean address for a path that has one, or null when it's fine (or not a page). */
 export function canonicalPath(pathname: string): string | null {
-  if (pathname === '/index.html') return '/'
-  if (pathname.length > 1 && pathname.endsWith('/')) return pathname.replace(/\/+$/, '') || '/'
-  if (pathname.endsWith('.html') && !pathname.startsWith('/assets/')) return pathname.slice(0, -'.html'.length)
-  return null
+  // One slash at a time: in a Location header, "//somewhere" is another site.
+  let path = pathname.replace(/\/{2,}/g, '/')
+  if (path === '/index.html') path = '/'
+  if (path.length > 1 && path.endsWith('/')) path = path.slice(0, -1)
+  if (path.endsWith('.html') && !path.startsWith('/assets/')) path = path.slice(0, -'.html'.length)
+  path ||= '/'
+  return path === pathname ? null : path
 }
 
 /** The file a path means, if dist/ has it: /x is x.html or x/index.html, / is index.html. */
@@ -242,7 +243,8 @@ export function deskNow(): Promise<Desk> {
         load: os.loadavg().map((n) => Math.round(n * 100) / 100),
         cpu,
         system: os.type(),
-        kernel: os.release(),
+        // The kernel's version, not its exact build: that would tell anyone which fixes the desk has.
+        kernel: os.release().split(/[.-]/).slice(0, 2).join('.'),
         cores: os.cpus().length,
       })),
     }

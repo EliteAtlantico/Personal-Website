@@ -139,28 +139,36 @@ export interface FrameResult {
   hot?: Array<{ where: string; ms: number }>
 }
 
-export async function frames(browser: Browser, base: string, { profile = false, only }: { profile?: boolean; only?: string } = {}): Promise<FrameResult[]> {
+/** Each scenario runs this many times, and the median run is kept: one run is too noisy to compare. */
+export async function frames(browser: Browser, base: string, { profile = false, only, dist, runs = 3 }: { profile?: boolean; only?: string; dist?: string; runs?: number } = {}): Promise<FrameResult[]> {
   const results: FrameResult[] = []
-  const maps = profile ? sourceMaps() : null
+  const maps = profile ? sourceMaps(dist) : null
   for (const scenario of FRAME_SCENARIOS) {
     if (only && !scenario.name.includes(only)) continue
-    const opened = await openPage(browser, 'desktop')
-    const { page, cdp } = opened
-    try {
-      if (scenario.fresh) {
-        await page.goto(base + scenario.route, { waitUntil: 'domcontentloaded' })
-        await (await page.waitForFunction(() => !!(window as unknown as { __perf?: { revealed?: number } }).__perf?.revealed, { polling: 16 })).dispose()
-      } else {
-        await page.goto(base + scenario.route, { waitUntil: 'load' })
-        await ready(page)
-        await scenario.setup?.(page)
+    const all: FrameResult[] = []
+    // A profiled run is slowed by the profiler, so it's one run, only for its hotspots.
+    for (let i = 0; i < (maps ? 1 : runs); i++) {
+      const opened = await openPage(browser, 'desktop')
+      const { page, cdp } = opened
+      try {
+        if (scenario.fresh) {
+          await page.goto(base + scenario.route, { waitUntil: 'domcontentloaded' })
+          await (await page.waitForFunction(() => !!(window as unknown as { __perf?: { revealed?: number } }).__perf?.revealed, { polling: 16 })).dispose()
+        } else {
+          await page.goto(base + scenario.route, { waitUntil: 'load' })
+          await ready(page)
+          await scenario.setup?.(page)
+        }
+        all.push({ name: scenario.name, ...(await window_(page, cdp, scenario, maps)) })
+      } catch (error) {
+        console.error(`  ${scenario.name}: ${(error as Error).message}`)
+      } finally {
+        await opened.close()
       }
-      results.push({ name: scenario.name, ...(await window_(page, cdp, scenario, maps)) })
-    } catch (error) {
-      console.error(`  ${scenario.name}: ${(error as Error).message}`)
-    } finally {
-      await opened.close()
     }
+    if (!all.length) continue
+    all.sort((a, b) => a.busy - b.busy)
+    results.push(all[all.length >> 1]!)
   }
   return results
 }
@@ -212,12 +220,12 @@ async function window_(page: Page, cdp: CDPSession, scenario: FrameScenario, map
 
 // --- Naming where the CPU time went ---
 
-type Maps = Map<string, SourceMapConsumer>
+export type Maps = Map<string, SourceMapConsumer>
 
 /** dist/assets/*.js.map, when the build made them (PERF_SOURCEMAP=1). */
-function sourceMaps(): Maps {
+export function sourceMaps(dist = 'dist'): Maps {
   const maps: Maps = new Map()
-  const assets = path.resolve('dist/assets')
+  const assets = path.resolve(dist, 'assets')
   for (const file of existsSync(assets) ? readdirSync(assets) : []) {
     if (file.endsWith('.js.map')) maps.set(file.slice(0, -'.map'.length), new SourceMapConsumer(JSON.parse(readFileSync(path.join(assets, file), 'utf8'))))
   }
@@ -230,7 +238,7 @@ interface ProfileNode {
   callFrame: { functionName: string; url: string; lineNumber: number; columnNumber: number }
 }
 
-function hotspots(profile: { nodes: ProfileNode[]; samples?: number[]; timeDeltas?: number[] }, maps: Maps) {
+export function hotspots(profile: { nodes: ProfileNode[]; samples?: number[]; timeDeltas?: number[] }, maps: Maps) {
   const self = new Map<number, number>()
   profile.samples?.forEach((id, i) => self.set(id, (self.get(id) ?? 0) + (profile.timeDeltas?.[i] ?? 0) / 1000))
   const byPlace = new Map<string, number>()

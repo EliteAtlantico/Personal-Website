@@ -16,7 +16,7 @@
 //   --dist DIR     measure another build than dist/ (a copy, so dist/ can be rebuilt meanwhile)
 // It exits with an error if a leak is found.
 import { readFileSync, writeFileSync } from 'node:fs'
-import { frames, printFrames, type FrameResult } from './frames'
+import { frames, printFrames, sourceMaps, type FrameResult } from './frames'
 import { leaked, leaks, printLeaks, type LeakResult } from './leaks'
 import { kb, launch, ms, serve, table } from './lib'
 import { loads, printLoads, type LoadResult } from './load'
@@ -43,20 +43,25 @@ try {
   console.log(`Chrome ${(await browser.version()).replace(/^\D+/, '')}, measuring ${server.url}\n`)
   if (run('load')) {
     console.log('First visits (median of each)')
-    results.load = await loads(browser, server.url, Number(option('runs') ?? 3))
+    results.load = await loads(browser, server.url, Number(option('runs') ?? 3), args.includes('--profile') ? sourceMaps(option('dist')) : null, option('only'))
     printLoads(results.load)
     console.log()
   }
   if (run('leaks')) {
     console.log('Leaks')
-    results.leaks = await leaks(browser, server.url, Number(option('rounds') ?? 10), option('only'))
+    const steady = await launch({ steady: true })
+    try {
+      results.leaks = await leaks(steady, server.url, Number(option('rounds') ?? 10), option('only'))
+    } finally {
+      await steady.close()
+    }
     printLeaks(results.leaks)
     failed = results.leaks.some((r) => leaked(r).length > 0)
     console.log()
   }
   if (run('frames')) {
     console.log('Motion')
-    results.frames = await frames(browser, server.url, { profile: args.includes('--profile'), only: option('only') })
+    results.frames = await frames(browser, server.url, { profile: args.includes('--profile'), only: option('only'), dist: option('dist') })
     printFrames(results.frames)
     console.log()
   }

@@ -1,10 +1,7 @@
-// Weight-axis-only builds: fonts with an optical-size axis are measured differently by
-// canvas (pretext) and the page in some browsers (Firefox), so text overflowed its layout.
-import '@fontsource-variable/fraunces/wght.css'
-import '@fontsource-variable/newsreader/wght.css'
-import '@fontsource-variable/newsreader/wght-italic.css'
-import '@fontsource/ibm-plex-mono/400.css'
-import '@fontsource/ibm-plex-mono/500.css'
+// fontsource's weight-axis-only builds (fonts with an optical-size axis are measured differently
+// by canvas (pretext) and the page in some browsers (Firefox), so text overflowed its layout), each
+// split into what the site shows and the rest of its set: see scripts/fonts.ts.
+import './styles/fonts.css'
 import './styles/main.css'
 import site from 'virtual:content'
 import type { Site } from './content/types'

@@ -3,6 +3,7 @@
 // Lighthouse's mobile test (slow 4G, a CPU four times slower) or a laptop on
 // good Wi-Fi.
 import type { Browser } from 'puppeteer-core'
+import { hotspots, type Maps } from './frames'
 import { kb, mainThread, ms, openPage, PROFILES, ready, sleep, table } from './lib'
 
 export interface LoadResult {
@@ -26,16 +27,24 @@ export interface LoadResult {
   heap: number
   /** Main-thread time used, ms. */
   main: number
+  /** With --profile: where the CPU time went, from the start until the page was shown. */
+  hot?: Array<{ where: string; ms: number }>
 }
 
 export const ROUTES = ['/', '/terminal', '/research/brain-freeze']
 
-export async function measureLoad(browser: Browser, base: string, route: string, profile: keyof typeof PROFILES): Promise<LoadResult> {
+export async function measureLoad(browser: Browser, base: string, route: string, profile: keyof typeof PROFILES, maps: Maps | null = null): Promise<LoadResult> {
   const opened = await openPage(browser, profile, { throttle: true })
   const { page, cdp } = opened
   try {
+    if (maps) {
+      await cdp.send('Profiler.enable')
+      await cdp.send('Profiler.setSamplingInterval', { interval: 200 })
+      await cdp.send('Profiler.start')
+    }
     await page.goto(base + route, { waitUntil: 'load', timeout: 60_000 })
     await ready(page, 60_000)
+    const hot = maps ? hotspots((await cdp.send('Profiler.stop')).profile, maps) : undefined
     // What loads after the page shows (the globe, the terminal) arrives and settles too.
     await page.waitForNetworkIdle({ idleTime: 1000, timeout: 60_000 }).catch(() => undefined)
     await sleep(1000)
@@ -56,6 +65,7 @@ export async function measureLoad(browser: Browser, base: string, route: string,
       bytes: { ...opened.bytes },
       heap,
       main: (await mainThread(cdp)).task,
+      hot,
     }
   } finally {
     await opened.close()
@@ -63,12 +73,16 @@ export async function measureLoad(browser: Browser, base: string, route: string,
 }
 
 /** The median run of several, metric by metric (first visits are noisy). */
-export async function loads(browser: Browser, base: string, runs: number): Promise<LoadResult[]> {
+export async function loads(browser: Browser, base: string, runs: number, maps: Maps | null = null, only?: string): Promise<LoadResult[]> {
   const results: LoadResult[] = []
   for (const profile of Object.keys(PROFILES) as Array<keyof typeof PROFILES>) {
     for (const route of ROUTES) {
+      if (only && !`${route} (${profile})`.includes(only)) continue
       const all: LoadResult[] = []
+      // Profiling slows what it watches, so only the first visit is profiled (and it doesn't count).
+      if (maps) all.push(await measureLoad(browser, base, route, profile, maps))
       for (let i = 0; i < runs; i++) all.push(await measureLoad(browser, base, route, profile))
+      const profiled = maps ? all.shift() : undefined
       const median = (pick: (r: LoadResult) => number) => {
         const sorted = all.map(pick).sort((a, b) => a - b)
         return sorted[sorted.length >> 1]!
@@ -90,6 +104,7 @@ export async function loads(browser: Browser, base: string, runs: number): Promi
         bytes,
         heap: median((r) => r.heap),
         main: median((r) => r.main),
+        hot: profiled?.hot,
       })
     }
   }
@@ -117,4 +132,9 @@ export function printLoads(results: LoadResult[]) {
   )
   const lcp = results.map((r) => `${r.route} (${r.profile}): ${r.lcpElement || '?'}`)
   console.log(`\nLargest paint: ${lcp.join(' · ')}`)
+  for (const r of results) {
+    if (!r.hot?.length) continue
+    console.log(`\n${r.route} (${r.profile}), until it was shown: where the CPU went`)
+    for (const { where, ms } of r.hot) console.log(`  ${String(ms).padStart(7)} ms  ${where}`)
+  }
 }

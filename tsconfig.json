@@ -12,5 +12,5 @@
     "skipLibCheck": true,
     "noEmit": true
   },
-  "include": ["src", "scripts", "server", "edge", "perf", "vite.config.ts"]
+  "include": ["src", "scripts", "server", "edge", "perf", "security", "vite.config.ts"]
 }

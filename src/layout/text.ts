@@ -72,22 +72,37 @@ export interface FitOptions {
  * Newspaper copyfitting: the largest size (in half-pixel steps) at which the
  * headline fits the column in the preferred number of lines without breaking
  * a word, then balanced so the lines come out even.
+ *
+ * Every width in a line grows in step with the size (these fonts have no
+ * optical sizes, and tracking is in ems), so the search measures the headline
+ * once, at the largest size, and tries each size by scaling the column
+ * instead of measuring the text again. The size it settles on is then checked
+ * with a real measurement, in case rounding moved a line break.
  */
 export function copyfit(text: string, base: Omit<FontSpec, 'size'>, opts: FitOptions): Fit {
   const fitsAt = (halfPx: number, maxLines: number) => {
     const prepared = prep(text, { ...base, size: halfPx / 2 })
     return measureLineStats(prepared, opts.width).lineCount <= maxLines && !breaksWord(prepared, opts.width)
   }
+  const largest = prep(text, { ...base, size: opts.max })
+  const fitsScaled = (halfPx: number, maxLines: number) => {
+    const width = (opts.width * opts.max) / (halfPx / 2)
+    return measureLineStats(largest, width).lineCount <= maxLines && !breaksWord(largest, width)
+  }
+  const [min, max] = [Math.round(opts.min * 2), Math.round(opts.max * 2)]
   let size = opts.min
   for (const maxLines of opts.lines) {
-    let lo = Math.round(opts.min * 2)
-    let hi = Math.round(opts.max * 2)
-    if (!fitsAt(lo, maxLines)) continue
+    if (!fitsAt(min, maxLines)) continue
+    let lo = min
+    let hi = max
     while (lo < hi) {
       const mid = Math.ceil((lo + hi) / 2)
-      if (fitsAt(mid, maxLines)) lo = mid
+      if (fitsScaled(mid, maxLines)) lo = mid
       else hi = mid - 1
     }
+    // For real now: step down if the scaled search was a hair too generous, up if it was too careful.
+    while (lo > min && !fitsAt(lo, maxLines)) lo--
+    while (lo < max && fitsAt(lo + 1, maxLines)) lo++
     size = lo / 2
     break
   }

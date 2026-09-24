@@ -11,6 +11,8 @@ interface Scenario {
   step(page: Page): Promise<void>
   /** What's expected to pile up by design, so it isn't called a leak. */
   grows?: Array<keyof Sample>
+  /** Each round types a command into the terminal. */
+  typed?: boolean
 }
 
 type Counted = Exclude<keyof Sample, 'detachedRoots'>
@@ -48,11 +50,13 @@ export const SCENARIOS: Scenario[] = [
   {
     name: 'globe, full screen, and q (terminal)',
     route: '/terminal',
+    typed: true,
     step: (page) => overlay(page, 'globe', '.terminal__globe canvas'),
   },
   {
     name: 'cmatrix and q (terminal)',
     route: '/terminal',
+    typed: true,
     step: (page) => overlay(page, 'cmatrix', '.terminal__matrix canvas'),
   },
   {
@@ -71,6 +75,7 @@ export const SCENARIOS: Scenario[] = [
     route: '/terminal',
     // Each dashboard stays in the scrollback (up to 2,000 blocks), like any terminal output.
     grows: ['heap', 'listeners'],
+    typed: true,
     step: async (page) => {
       const before = await page.$$eval('.t-dash', (all) => all.length)
       await terminalCommand(page, 'dashboard')
@@ -89,6 +94,7 @@ export interface LeakResult {
   before: Sample
   after: Sample
   grows: Array<keyof Sample>
+  typed: boolean
 }
 
 export async function leaks(browser: Browser, base: string, rounds: number, only?: string): Promise<LeakResult[]> {
@@ -114,7 +120,7 @@ export async function leaks(browser: Browser, base: string, rounds: number, only
       for (let i = 0; i < half; i++) await scenario.step(page)
       await sleep(QUIET)
       const after = await sample(page, cdp)
-      results.push({ name: scenario.name, rounds: half, start, before, after, grows: scenario.grows ?? [] })
+      results.push({ name: scenario.name, rounds: half, start, before, after, grows: scenario.grows ?? [], typed: !!scenario.typed })
     } catch (error) {
       console.error(`  ${scenario.name}: ${(error as Error).message}`)
     } finally {
@@ -128,8 +134,9 @@ export async function leaks(browser: Browser, base: string, rounds: number, only
 export function leaked(r: LeakResult): string[] {
   const per = (key: Counted) => (r.after[key] - r.before[key]) / r.rounds
   const found: string[] = []
-  // The scrollback is kept on purpose, so it's left out of the node count.
-  const nodes = (per('nodes') - per('scrollback'))
+  // The scrollback is kept on purpose, so it's left out of the node count. So is one node a round
+  // where commands are typed: the text box's undo history keeps what was typed (that's the browser).
+  const nodes = per('nodes') - per('scrollback') - (r.typed ? 1 : 0)
   if (per('heap') > 24 * 1024 && !r.grows.includes('heap')) found.push(`heap +${kb(per('heap'))}/round`)
   if (nodes >= 1 && !r.grows.includes('nodes')) found.push(`+${nodes.toFixed(1)} nodes/round`)
   if (per('listeners') >= 1 && !r.grows.includes('listeners')) found.push(`+${per('listeners').toFixed(1)} listeners/round`)

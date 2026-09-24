@@ -42,8 +42,10 @@ function content(): Plugin {
     },
     async load(id) {
       if (id !== RESOLVED_ID) return undefined
-      // Drafts are visible while writing, and never shipped.
-      return `export default ${JSON.stringify(await loadSite({ includeDrafts: dev, optimizeMedia: !dev }))}`
+      // Drafts are visible while writing, and never shipped. As a string for JSON.parse: for data
+      // this size, browsers read that faster than the same thing written out as a JavaScript object.
+      const site = JSON.stringify(await loadSite({ includeDrafts: dev, optimizeMedia: !dev }))
+      return `export default JSON.parse(${JSON.stringify(site)})`
     },
     configureServer(server) {
       server.watcher.add(CONTENT_DIR)

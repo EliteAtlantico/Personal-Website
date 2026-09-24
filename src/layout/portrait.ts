@@ -21,6 +21,8 @@ import { findSkyline } from './skyline'
 import { prep } from './text'
 
 const LEVELS = 14
+/** Positions across a pixel a letter can start at (as fillText's subpixel positioning has them). */
+const PHASES = 4
 const PUSH_RADIUS = 70
 const START: LayoutCursor = { segmentIndex: 0, graphemeIndex: 0 }
 const SOFT_HYPHEN = String.fromCharCode(0xad)
@@ -300,8 +302,9 @@ function build(page: HTMLElement, figure: HTMLElement, img: HTMLImageElement, si
    * A sheet of stamps: every letter the banner uses, drawn once in one weight
    * and colour at the screen's resolution. fillText lays its text out on every
    * call, and the banner draws thousands of letters a frame; copying a stamp's
-   * pixels is many times cheaper, and, copied to whole device pixels, looks
-   * exactly the same.
+   * pixels is many times cheaper. Like fillText, it places letters to a quarter
+   * of a pixel across (and whole pixels down): each letter is drawn at the four
+   * quarter-pixel offsets, and the copy that matches is used.
    */
   const sheet = (weight: number, color: string): Sheet => {
     const key = `${weight} ${color}`
@@ -311,28 +314,35 @@ function build(page: HTMLElement, figure: HTMLElement, img: HTMLImageElement, si
     const px = font.size * dpr
     const cell = Math.ceil(px * 1.6)
     const inset = Math.ceil(px * 0.3)
-    const columns = Math.max(1, Math.ceil(Math.sqrt(letters.length)))
+    const columns = Math.max(1, Math.ceil(Math.sqrt(letters.length * PHASES)))
     const stamps = document.createElement('canvas')
     stamps.width = columns * cell
-    stamps.height = Math.max(1, Math.ceil(letters.length / columns)) * cell
+    stamps.height = Math.max(1, Math.ceil((letters.length * PHASES) / columns)) * cell
     const sctx = stamps.getContext('2d')!
     sctx.font = canvasFont({ ...font, size: px, weight })
     sctx.textBaseline = 'top'
     sctx.fillStyle = color
     const at = new Map<string, number>()
     letters.forEach((ch, i) => {
-      at.set(ch, i)
-      sctx.fillText(ch, (i % columns) * cell + inset, Math.floor(i / columns) * cell + inset)
+      at.set(ch, i * PHASES)
+      for (let phase = 0; phase < PHASES; phase++) {
+        const n = i * PHASES + phase
+        sctx.fillText(ch, (n % columns) * cell + inset + phase / PHASES, Math.floor(n / columns) * cell + inset)
+      }
     })
     const made = { canvas: stamps, at, cell, inset, columns }
     sheets.set(key, made)
     return made
   }
   const stamp = (from: Sheet, ch: string, x: number, y: number) => {
-    const i = from.at.get(ch)
-    if (i === undefined) return
+    const first = from.at.get(ch)
+    if (first === undefined) return
     const { cell, inset, columns } = from
-    ctx.drawImage(from.canvas, (i % columns) * cell, Math.floor(i / columns) * cell, cell, cell, (Math.round(x * dpr) - inset) / dpr, (Math.round(y * dpr) - inset) / dpr, cell / dpr, cell / dpr)
+    // The whole pixel, and which quarter of the next one the letter starts in.
+    const quarters = Math.round(x * dpr * PHASES)
+    const column = Math.floor(quarters / PHASES)
+    const n = first + (quarters - column * PHASES)
+    ctx.drawImage(from.canvas, (n % columns) * cell, Math.floor(n / columns) * cell, cell, cell, (column - inset) / dpr, (Math.round(y * dpr) - inset) / dpr, cell / dpr, cell / dpr)
   }
 
   /** Draws the letters (those touching `area`, for a partial redraw, or all of them). */

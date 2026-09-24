@@ -229,11 +229,12 @@ function run(host: HTMLElement, text: string, pace: (typeof PACE)[keyof typeof P
   }
 
   /**
-   * Stamps: every character the rain can show (it's all ASCII), drawn once in
-   * one colour at the screen's resolution. fillText lays its text out on every
-   * call, and the rain draws thousands of characters a frame; copying a
-   * stamp's pixels to whole device pixels is much cheaper, and looks the same.
-   * The heads' glow is part of their stamps, instead of a blur on every frame.
+   * Stamps for the heads: every character the rain can show (it's all ASCII),
+   * drawn once, glowing, at the screen's resolution. A glow is a blur, and
+   * blurring each head on every frame is the costliest thing a canvas does; a
+   * stamp is copied with its glow already done. (The rest of the rain stays
+   * plain fillText: single monospaced characters are cheap to draw, cheaper
+   * than copying thousands of stamps at their own opacities.)
    */
   let dpr = 1
   let sheets = new Map<string, Sheet>()
@@ -277,8 +278,8 @@ function run(host: HTMLElement, text: string, pace: (typeof PACE)[keyof typeof P
 
   const draw = (now: number) => {
     ctx.clearRect(0, 0, width, height)
-    const glowing = sheet(ink.glow)
-    const falling = sheet(ink.rain)
+    ctx.font = canvasFont(FONT)
+    ctx.textBaseline = 'middle'
     const tick = Math.floor(now / GLITCH_MS)
     const flicker = Math.floor(now / 120)
     const obstacle = aim ? circleObstacle(aim.x, aim.y, aim.r) : null
@@ -308,17 +309,18 @@ function run(host: HTMLElement, text: string, pace: (typeof PACE)[keyof typeof P
         }
         // Bright green just behind the head, then fading slowly through the leaf green.
         ctx.globalAlpha = fade ** 0.7
-        stamp(age < GLOW_MS ? glowing : falling, ch, x, y)
+        ctx.fillStyle = age < GLOW_MS ? ink.glow : ink.rain
+        ctx.fillText(ch, x, y + ROW / 2 + 0.5)
       }
     }
     // What the cursor pushed splits into the oranges, like a signal that's slipping.
-    const flame = sheet(ink.flame)
-    const amber = sheet(ink.amber)
     for (const { ch, x, y, alpha, moved } of lit) {
       if (!moved) continue
       ctx.globalAlpha = 0.75 * alpha
-      stamp(flame, ch, x - 1.5, y)
-      stamp(amber, ch, x + 1.5, y)
+      ctx.fillStyle = ink.flame
+      ctx.fillText(ch, x - 1.5, y + ROW / 2 + 0.5)
+      ctx.fillStyle = ink.amber
+      ctx.fillText(ch, x + 1.5, y + ROW / 2 + 0.5)
     }
     const heads = sheet(ink.head, true)
     for (const { ch, x, y, alpha } of lit) {

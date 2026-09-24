@@ -9,6 +9,8 @@
     "serve": "bun run build:server && node build/server.mjs",
     "deploy": "deploy/deploy.sh",
     "perf": "bun perf/run.ts",
+    "fonts": "bun scripts/fonts.ts",
+    "security": "bun security/run.ts",
     "preview": "vite preview",
     "check": "tsc --noEmit",
     "resume": "cd resume && tectonic -X compile khalil_chaghouri_resume.tex && tectonic -X compile khalil_chaghouri_resume_public.tex && cp khalil_chaghouri_resume_public.pdf ../public/resume.pdf"

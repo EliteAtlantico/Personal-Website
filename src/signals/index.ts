@@ -7,7 +7,7 @@
 // &org=University of Toronto, &battery=0.1, &gpc=1 …), and stored choices are
 // ignored unless given too (&personalize=1, &view=paper).
 import type { Site } from '../content/types'
-import { basics, device, gpu, network, type Signals } from './collect'
+import { basics, device, gpu, network, plainName, type Signals } from './collect'
 import { decide, type Decision, type Prefs } from './decide'
 import { firstDesk, personalizeSite } from './apply'
 import { forgetPrefs, readPrefs, writePrefs } from './prefs'
@@ -125,17 +125,19 @@ export async function everything(): Promise<Partial<Signals>> {
 function debugOverrides() {
   const params = new URLSearchParams(location.search)
   if (!params.has('debug')) return undefined
-  const text = (key: string) => params.get(key) || undefined
+  // Names only: whatever the link says, it can't write a message onto the page.
+  const text = (key: string) => plainName(params.get(key))
+  const code = (key: string, allowed: RegExp) => params.get(key)?.replace(allowed, '').slice(0, 40) || undefined
   const num = (key: string) => (params.has(key) && params.get(key) !== '' && !Number.isNaN(Number(params.get(key))) ? Number(params.get(key)) : undefined)
   const flag = (key: string) => (params.has(key) ? params.get(key) !== '0' && params.get(key) !== 'false' : undefined)
   const battery = num('battery')
   const signals: Partial<Signals> = {
-    referrer: text('ref')?.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0],
+    referrer: params.get('ref')?.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0]?.replace(/[^a-z0-9.-]/gi, '').slice(0, 60) || undefined,
     os: text('os'),
     browser: text('browser'),
     browserVersion: text('version'),
-    timeZone: text('tz'),
-    languages: text('lang')?.split(','),
+    timeZone: code('tz', /[^A-Za-z0-9_/+-]/g),
+    languages: code('lang', /[^A-Za-z0-9,-]/g)?.split(',').filter(Boolean),
     hour: num('hour'),
     day: num('day'),
     fonts: params.has('fonts') ? (text('fonts')?.split(',').map((f) => f.trim()).filter(Boolean) ?? []) : undefined,

@@ -284,14 +284,25 @@ export function draw(gl: WebGLRenderingContext, buffers: Buffers, mode: number) 
   } else gl.drawArrays(mode, 0, buffers.count)
 }
 
-/** A CSS colour (any the browser knows: #hex, rgb(), oklch()...) as red, green and blue from 0 to 1. */
+let painter: CanvasRenderingContext2D | null = null
+
+/**
+ * A computed CSS colour as red, green and blue from 0 to 1. Browsers give
+ * computed colours as rgb() or rgba(), read here directly; anything else
+ * (color(), oklch()) is painted on a one-pixel canvas and read back.
+ */
 export function rgb(color: string): Vec3 {
-  const canvas = document.createElement('canvas')
-  canvas.width = canvas.height = 1
-  const ctx = canvas.getContext('2d', { willReadFrequently: true })!
-  ctx.fillStyle = color
-  ctx.fillRect(0, 0, 1, 1)
-  const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data
+  const plain = /^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)/.exec(color)
+  if (plain) return [Number(plain[1]) / 255, Number(plain[2]) / 255, Number(plain[3]) / 255]
+  if (!painter) {
+    const canvas = document.createElement('canvas')
+    canvas.width = canvas.height = 1
+    painter = canvas.getContext('2d', { willReadFrequently: true })!
+  }
+  painter.clearRect(0, 0, 1, 1)
+  painter.fillStyle = color
+  painter.fillRect(0, 0, 1, 1)
+  const [r, g, b] = painter.getImageData(0, 0, 1, 1).data
   return [r! / 255, g! / 255, b! / 255]
 }
 

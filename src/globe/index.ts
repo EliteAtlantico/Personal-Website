@@ -117,9 +117,7 @@ export function mountGlobe(host: HTMLElement, { site, mode, open }: GlobeOptions
   const hint = caption?.textContent ?? ''
 
   // --- What's drawn: the sea, a haze at the edge, the land as dots, the cities, the arc, the stories ---
-  const cities = Object.values(CITIES).map((city) => ({ center: scale(toVector(city.lat, city.lng), 1.003) }))
-  const from = toVector(CITIES.kuwait.lat, CITIES.kuwait.lng)
-  const to = toVector(CITIES.toronto.lat, CITIES.toronto.lng)
+  const { cities, ...world } = earth()
 
   const where = places(site)
   const items = [...where.toronto, ...where.kuwait, ...where.between]
@@ -129,15 +127,7 @@ export function mountGlobe(host: HTMLElement, { site, mode, open }: GlobeOptions
   const dots = pins(where).map((pin) => ({ pin, at: toVector(pin.lat, pin.lng, pin.radius) }))
   const hotness = new Float32Array(dots.length)
 
-  const meshes = {
-    ocean: sphere(0.994, 96, 64),
-    air: sphere(1.07, 64, 48),
-    land: { positions: landPoints(land) },
-    arc: tube((t) => scale(slerp(from, to, t), 1 + ARC_HEIGHT * Math.sin(Math.PI * t)), cross(from, to), 192, 0.0045, 8),
-    dots: cities.map(({ center }) => mark(center, 0, 0.012, 24)),
-    rings: cities.map(({ center }) => mark(center, 0.016, 0.02, 48)),
-    stories: { positions: new Float32Array(dots.flatMap(({ at }) => at)), hot: hotness },
-  }
+  const meshes = { ...world, stories: { positions: new Float32Array(dots.flatMap(({ at }) => at)), hot: hotness } }
 
   // --- On the graphics card (again, if the browser ever takes it away and gives it back) ---
   const parallel = gl.getExtension('KHR_parallel_shader_compile') as { COMPLETION_STATUS_KHR: number } | null
@@ -525,6 +515,26 @@ export function mountGlobe(host: HTMLElement, { site, mode, open }: GlobeOptions
       play()
     },
     dispose,
+  }
+}
+
+let built: ReturnType<typeof build> | null = null
+
+/** Everything but the stories is the same on every globe: built on the first one, then shared. */
+const earth = () => (built ??= build())
+
+function build() {
+  const cities = Object.values(CITIES).map((city) => ({ center: scale(toVector(city.lat, city.lng), 1.003) }))
+  const from = toVector(CITIES.kuwait.lat, CITIES.kuwait.lng)
+  const to = toVector(CITIES.toronto.lat, CITIES.toronto.lng)
+  return {
+    cities,
+    ocean: sphere(0.994, 96, 64),
+    air: sphere(1.07, 64, 48),
+    land: { positions: landPoints(land) },
+    arc: tube((t) => scale(slerp(from, to, t), 1 + ARC_HEIGHT * Math.sin(Math.PI * t)), cross(from, to), 192, 0.0045, 8),
+    dots: cities.map(({ center }) => mark(center, 0, 0.012, 24)),
+    rings: cities.map(({ center }) => mark(center, 0.016, 0.02, 48)),
   }
 }
 

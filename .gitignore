@@ -11,3 +11,13 @@ resume/khalil_chaghouri_resume.original.tex
 
 # content/private/ has its own .gitignore that ignores everything inside it.
 build/
+
+# Secrets and local state that must never reach the (public) repository.
+.env
+.env.*
+.dev.vars
+.wrangler/
+.cloudflared/
+*.pem
+*.key
+*.p12

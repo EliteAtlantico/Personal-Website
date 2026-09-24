@@ -116,6 +116,16 @@ describe('the Worker in front of it', () => {
     expect(response.headers.get('location')).toBe('https://chaghouri.example/projects/butler-bot?from=card')
   })
 
+  test("the build's own files come from the copy, and from the desk only if the copy hasn't got them", async () => {
+    const has = { fetch: async (request: Request) => new URL(request.url).pathname === '/assets/app-1a2b.js' ? new Response('copy of app') : new Response('missing', { status: 404 }) }
+    const edge = await ask('/assets/app-1a2b.js', { ASSETS: has, ORIGIN: base })
+    expect(await edge.text()).toBe('copy of app')
+    expect(edge.headers.get('x-served-from')).toBe('copy')
+    const newer = await ask('/assets/app-1a2b.js', { ASSETS: { fetch: async () => new Response('missing', { status: 404 }) }, ORIGIN: base })
+    expect(await newer.text()).toBe('console.log("app")')
+    expect(newer.headers.get('x-served-from')).toBe('desk')
+  })
+
   test('everything else comes from the desk while it answers', async () => {
     const response = await ask('/projects/butler-bot', { ASSETS: copy, ORIGIN: base })
     expect(await response.text()).toBe('<h1>butler</h1>')

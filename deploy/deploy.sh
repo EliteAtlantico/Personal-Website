@@ -9,8 +9,13 @@ bun run build
 bun run build:server
 
 # The desk: the site, the server, and the service files (systemd, as kc).
+# The last builds' assets stay a month: a page someone still has open loads its
+# chunks (the terminal, the globe) by their old names. They never clash, since
+# every name is the file's own hash.
 ssh "$DESK" 'mkdir -p ~/site ~/.config/systemd/user'
-rsync -az --delete --exclude .assetsignore dist/ "$DESK:site/dist/"
+rsync -az --delete --exclude .assetsignore --exclude /assets/ dist/ "$DESK:site/dist/"
+rsync -az dist/assets/ "$DESK:site/dist/assets/"
+ssh "$DESK" 'find ~/site/dist/assets -type f -mtime +30 -delete'
 rsync -az build/server.mjs "$DESK:site/server.mjs"
 rsync -az deploy/kc-site.service deploy/cloudflared.service "$DESK:.config/systemd/user/"
 ssh "$DESK" 'systemctl --user daemon-reload && systemctl --user enable --now kc-site.service && systemctl --user restart kc-site.service && systemctl --user is-active kc-site.service'

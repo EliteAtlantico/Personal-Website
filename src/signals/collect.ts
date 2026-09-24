@@ -153,10 +153,28 @@ function askEdge() {
   return visitor
 }
 
+/**
+ * A name from outside (a network's, a city's, a ?debug value): letters,
+ * numbers and a little punctuation, never long. Names are shown on the page,
+ * so this is what keeps a link from putting a message of its own there.
+ */
+export function plainName(value: string | undefined | null, max = 48): string | undefined {
+  const clean = value
+    ?.normalize('NFC')
+    .replace(/[^\p{L}\p{N} .,&'()-]+/gu, ' ')
+    // A dot ends a word ("Inc.") but never joins two, so no web address gets through.
+    .replace(/\.(?=\S)/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, max)
+    .trim()
+  return clean || undefined
+}
+
 /** What Cloudflare saw (city, network), from the edge worker (edge/worker.ts). Never waited on for more than 400 ms. */
 export async function network(): Promise<Pick<Signals, 'city' | 'region' | 'country' | 'org' | 'eu'>> {
   const data = await Promise.race([askEdge(), new Promise<Record<string, unknown>>((resolve) => setTimeout(() => resolve({}), 400))])
-  const text = (key: string) => (typeof data[key] === 'string' && data[key] ? (data[key] as string) : undefined)
+  const text = (key: string) => (typeof data[key] === 'string' ? plainName(data[key] as string) : undefined)
   return { city: text('city'), region: text('region'), country: text('country'), org: text('org'), eu: data.eu === true }
 }
 
@@ -221,6 +239,8 @@ function codingFonts(): string[] {
     ctx.font = `72px ${font}`
     return ctx.measureText(sample).width
   }
-  const bases = ['monospace', 'serif', 'sans-serif'].map((base) => [base, width(base)] as const)
+  // Measured with monospace to fall back on, a font that's there changes the width; one that isn't,
+  // doesn't. Unless it's the system's monospace itself: serif, as a second fallback, catches that.
+  const bases = ['monospace', 'serif'].map((base) => [base, width(base)] as const)
   return candidates.filter((name) => bases.some(([base, w]) => width(`"${name}", ${base}`) !== w))
 }

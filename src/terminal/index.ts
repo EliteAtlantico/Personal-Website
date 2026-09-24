@@ -53,9 +53,9 @@ const env: Env = {
   now: () => new Date(),
   columns: () => mounted?.columns() ?? 80,
   site: () => edition()?.site ?? session!.site,
-  visitor: () => {
+  visitor: (full) => {
     const current = edition()
-    return current && { ...current, signals: seen() }
+    return current && { ...current, signals: full ? seen() : current.signals }
   },
   personalize: (on) => void choose({ personalize: on }),
   desk: deskSoFar,

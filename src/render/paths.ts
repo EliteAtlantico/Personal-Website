@@ -6,7 +6,13 @@ export const itemPath = (item: Item) => (item.section === 'now' ? '/now' : `/${i
 
 /** "/projects/kc-bots/", "/projects/kc-bots.html" and "/projects/kc-bots" are the same page. */
 export function normalizePath(pathname: string) {
-  let path = decodeURI(pathname).replace(/\/index\.html$/, '/').replace(/\.html$/, '')
+  let path = pathname
+  try {
+    path = decodeURI(pathname)
+  } catch {
+    // A broken escape (anyone can link to one): the path as it came, which matches no page.
+  }
+  path = path.replace(/\/index\.html$/, '/').replace(/\.html$/, '')
   if (path.length > 1) path = path.replace(/\/+$/, '')
   return path || '/'
 }

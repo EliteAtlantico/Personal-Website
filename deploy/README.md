@@ -7,6 +7,7 @@ front of it and a copy of the site on Cloudflare for when the desk is asleep.
 visitor ─▶ Cloudflare ─▶ the Worker (edge/worker.ts)
                            ├─ www.<domain>  → 308 to <domain>
                            ├─ /api/visitor  → answered right there, from what Cloudflare saw
+                           ├─ /assets/…     → the copy, from the edge (the same files the desk has: named by their contents)
                            └─ everything else → https://desk.<domain>
                                                   (the tunnel → kc-site on 127.0.0.1:8787, on the desk)
                                 ↳ no answer in 3 s, or an error → the copy of dist/ deployed with the Worker
@@ -15,6 +16,10 @@ visitor ─▶ Cloudflare ─▶ the Worker (edge/worker.ts)
 Every response says who answered it in `x-served-from`: `desk`, `copy` or
 `edge`. When the copy answers, `/api/desk` says `{ "live": false }`, so the
 footer and `uptime` say the desk is asleep.
+
+The pages come from the desk; the scripts, styles and fonts they load come
+from Cloudflare's edge, near each visitor, so the desk's upload bandwidth
+only ever carries pages.
 
 | File | What it is |
 | --- | --- |
@@ -135,3 +140,31 @@ ssh kc@archlinux 'ss -tlnp'
 - **The desk:** logs nothing, not even addresses or paths.
 - **The Worker:** keeps nothing. `/api/visitor` hands a visitor's own city and network back to their browser, which uses them to arrange the paper (`src/signals`), and that's where they stay.
 - **`/api/desk`:** has uptime, load, CPU temperature, OS, kernel and core count, and nothing else. It's read at most every 10 seconds, however often it's asked.
+
+## Security
+
+```bash
+bun run build && bun run build:server
+bun run security
+bun run security -- --host
+```
+
+The first line builds what gets tested. `bun run security` then attacks it:
+
+- **The desk's server** (build/server.mjs on Node): reading files outside `dist/`, redirects off the site, other methods, malformed and smuggled requests, security headers on every response, and stack traces in errors.
+- **The Worker:** requests sent anywhere but the desk, the visitor's cookies or address passed on, redirects, and headers.
+- **The pages, in a browser:** script injection through everything a link or a visitor controls (the address, `?debug`, what Cloudflare says, the referrer, localStorage, the terminal's prompt), framing by other sites, and requests to other sites.
+- **The repository:** it's public, so every commit is checked for keys, tokens, phone numbers and private files. It also checks what `dist/` ships, and runs `bun audit` on the dependencies.
+
+`--host` also looks at the desk over SSH, reading only. The run fails on anything worse than "low".
+
+On the desk (Khalil, once; these need `sudo`):
+
+1. **SSH with keys only.** Password logins are on (the default). Make sure your key logs you in first (it does from the Mac), then run:
+   ```bash
+   printf 'PasswordAuthentication no\nKbdInteractiveAuthentication no\nPermitRootLogin no\n' | sudo tee /etc/ssh/sshd_config.d/10-keys-only.conf
+   sudo systemctl reload sshd
+   ```
+2. **Docker gets past ufw.** A container's published port is open to the whole network whatever ufw says (the one on 9080 is). If only this machine or Tailscale needs it, bind it in its compose file to `127.0.0.1:9080:80` (or the Tailscale address).
+3. **Nothing opened to the internet.** Sunshine (47984–48010), Syncthing (22000) and whatever is on 3000 (AdGuard Home's admin page by default) listen on the local network. In the router, check that no port is forwarded to the desk, and turn UPnP off (in the router, and in Sunshine) so nothing opens one by itself. The site needs no open port at all: the tunnel dials out.
+4. **Accounts.** Turn on two-factor sign-in for Cloudflare and GitHub. Whoever holds those holds the site.

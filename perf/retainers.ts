@@ -21,7 +21,7 @@ if (!scenario || !what) {
 }
 
 const server = await serve()
-const browser = await launch()
+const browser = await launch({ steady: true })
 const { page, cdp, close } = await openPage(browser, 'desktop', { network: false })
 const snapshot = async () => {
   await sleep(2500)

@@ -37,7 +37,8 @@ export interface Env {
   /** The site as this visitor's front page lays it out (src/signals); the dashboard follows it. */
   site(): Site
   /** What the visitor's browser shared, and what personalizing did with it (whoami). */
-  visitor(): Visitor | undefined
+  /** What personalizing read and decided. `full`: the graphics card too (slow to read, so only whoami asks). */
+  visitor(full?: boolean): Visitor | undefined
   /** Turns personalizing on or off, remembered in their browser. */
   personalize(on: boolean): void
   /** The desk serving the site, if it's been heard from (src/desk.ts). */
@@ -602,7 +603,7 @@ export function createShell(site: Site, env: Env): Shell {
 
   /** Everything the visitor's browser told the site, and what the site did with it. */
   function whoami(): Line[] {
-    const visitor = env.visitor()
+    const visitor = env.visitor(true)
     const intro = [line(USER), line(seg('No accounts and no cookies here, so everyone is a guest. But every browser tells every site a few things:', 'dim'))]
     if (!visitor) return intro
     const groups = facts(visitor.signals)

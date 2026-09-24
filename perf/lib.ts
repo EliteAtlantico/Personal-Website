@@ -54,7 +54,12 @@ export function findChrome(): string {
   return found
 }
 
-export function launch(): Promise<Browser> {
+/**
+ * A headless Chrome. `steady`, for counting leaks: JavaScript runs without its
+ * optimizing compilers, whose code keeps piling up for a while as a page's
+ * functions get hot, which would look like a leak (it isn't: it levels off).
+ */
+export function launch({ steady = false } = {}): Promise<Browser> {
   return puppeteer.launch({
     executablePath: findChrome(),
     headless: true,
@@ -62,7 +67,7 @@ export function launch(): Promise<Browser> {
     args: [
       // Exact heap numbers, and gc() for the page, so a leak isn't lost in the noise.
       '--enable-precise-memory-info',
-      '--js-flags=--expose-gc',
+      steady ? '--js-flags=--expose-gc --no-sparkplug --no-maglev --no-turbofan --no-flush-bytecode' : '--js-flags=--expose-gc',
       // Frames and timers at full speed, as in a tab someone is looking at.
       '--disable-background-timer-throttling',
       '--disable-renderer-backgrounding',

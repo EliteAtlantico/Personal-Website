@@ -5,6 +5,7 @@ import { layoutBio } from './layout/bio'
 import { fontsReady } from './layout/fonts'
 import { layoutHeadlines } from './layout/headlines'
 import { layoutLead } from './layout/lead'
+import { inWidthBatch } from './layout/observe'
 import { layoutDesks } from './layout/masonry'
 import { layoutPortrait } from './layout/portrait'
 import type { Site } from './content/types'
@@ -37,14 +38,17 @@ export async function enhance(page: HTMLElement, signal: AbortSignal, site: Site
   const terminal = page.querySelector<HTMLElement>('.terminal')
   if (await fontsReady(terminal ? 'mono' : 'paper')) {
     if (signal.aborted) return
-    // Each layout is independent; one failing shouldn't take the others down.
-    for (const layout of [layoutHeadlines, layoutDesks, layoutBio, layoutLead, layoutPortrait]) {
-      try {
-        layout(page, signal)
-      } catch (error) {
-        console.error(error)
+    // Each layout is independent; one failing shouldn't take the others down. Their widths are
+    // all read first, together (see observe.ts), instead of one forced layout per headline.
+    inWidthBatch(() => {
+      for (const layout of [layoutHeadlines, layoutDesks, layoutBio, layoutLead, layoutPortrait]) {
+        try {
+          layout(page, signal)
+        } catch (error) {
+          console.error(error)
+        }
       }
-    }
+    })
   } else {
     // No pretext layout, so no typographic banner: show the photo itself.
     page.querySelector('.masthead__banner')?.classList.add('is-photo')
