@@ -2,7 +2,8 @@
 // the desk is asleep. `bun run deploy` builds everything and runs `wrangler
 // deploy`; deploy/README.md has the one-time setup.
 {
-  "name": "chaghouri",
+  // The Worker Cloudflare builds and deploys from GitHub on every push to main.
+  "name": "personal-website",
   "main": "edge/worker.ts",
   "compatibility_date": "2026-09-01",
   "assets": {

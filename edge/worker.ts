@@ -42,14 +42,18 @@ export const DESK_TIMEOUT = 3000
 /** Request headers worth passing on to the desk (none of them about the visitor). */
 const FORWARD = ['accept', 'accept-encoding', 'if-none-match', 'if-modified-since', 'range']
 
+/** `wrangler dev`, which has no HTTPS. */
+const LOCAL = /^(?:localhost|127\.0\.0\.1|\[::1\])$/
+
 export default {
   async fetch(request: Request & { cf?: Cf }, env: Env): Promise<Response> {
     const url = new URL(request.url)
-    // One address for the site: www.<domain> is sent to <domain>.
-    if (url.hostname.startsWith('www.')) {
-      url.hostname = url.hostname.slice('www.'.length)
-      return mark(new Response(null, { status: 308, headers: { location: url.href } }), 'edge')
-    }
+    // One address for the site: www.<domain> is sent to <domain>, and http:// to https://
+    // (after that, HSTS keeps the browser on https:// by itself), in one redirect.
+    const home = new URL(url)
+    if (home.hostname.startsWith('www.')) home.hostname = home.hostname.slice('www.'.length)
+    if (home.protocol === 'http:' && !LOCAL.test(home.hostname)) home.protocol = 'https:'
+    if (home.href !== url.href) return mark(new Response(null, { status: 308, headers: { location: home.href } }), 'edge')
     if (url.pathname === '/api/visitor') return visitor(request.cf)
     if (url.pathname.startsWith('/assets/')) {
       const copy = await env.ASSETS.fetch(request)

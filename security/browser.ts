@@ -1,7 +1,9 @@
 // Attacks on the pages, in a real browser: script injection (XSS) through
 // everything a visitor or a link can control (the address, ?debug, what
 // Cloudflare says about a visitor, the referrer, localStorage, the
-// terminal's prompt), framing (clickjacking), and requests to other sites.
+// terminal's prompt), prototype pollution, framing (clickjacking), and
+// requests to other sites. The browser suite runs it on the pages built
+// here; the live suite runs it on the deployed site.
 import { createServer } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import type { Browser, Page } from 'puppeteer-core'
@@ -18,22 +20,28 @@ const WATCH = () => {
   document.addEventListener('securitypolicyviolation', (e) => w.__violations.push(`${e.violatedDirective} ${e.blockedURI}`))
 }
 
+/** Keys that would give every object a `kcpwn` property if the site merged them in carelessly. */
+const POLLUTE = '__proto__[kcpwn]=1&constructor[prototype][kcpwn]=1&__proto__.kcpwn=1'
+
 async function verdict(page: Page) {
   return page.evaluate(() => {
     const w = window as unknown as { __pwn?: string; __violations: string[] }
     // The site never writes on* attributes itself; any element that has one was injected.
     const injected = [...document.querySelectorAll('*')].filter((el) => [...el.attributes].some((a) => /^on/i.test(a.name))).map((el) => el.outerHTML.slice(0, 80))
     const scripted = [...document.querySelectorAll('a[href^="javascript:" i], iframe[srcdoc]')].map((el) => el.outerHTML.slice(0, 80))
-    return { ran: w.__pwn, injected: [...injected, ...scripted], violations: w.__violations }
+    const polluted = ({} as Record<string, unknown>).kcpwn !== undefined
+    return { ran: w.__pwn, injected: [...injected, ...scripted], violations: w.__violations, polluted }
   })
 }
 
-export async function attackBrowser(): Promise<Finding[]> {
-  const checks = new Checks('Pages (in a browser)')
-  const server = await serve()
+/** The pages built here (served as the desk serves them), or with `site`, the pages as deployed there. */
+export async function attackBrowser(site?: string): Promise<Finding[]> {
+  const checks = new Checks(site ? 'Live pages (in a browser)' : 'Pages (in a browser)')
+  const server = site ? { url: new URL(site).origin, close() {} } : await serve()
   const browser = await launch()
   const external = new Set<string>()
   const dialogs: string[] = []
+  const polluted: string[] = []
   try {
     const visit = async (label: string, go: (page: Page) => Promise<void>, { visitor }: { visitor?: Record<string, string> } = {}) => {
       const opened = await openPage(browser, 'desktop')
@@ -54,6 +62,7 @@ export async function attackBrowser(): Promise<Finding[]> {
       try {
         await go(page)
         const found = await verdict(page)
+        if (found.polluted) polluted.push(label)
         checks.expect(`no script runs: ${label}`, !found.ran, 'high', found.ran ? `payload ran (${found.ran})` : undefined)
         checks.expect(`no HTML is injected: ${label}`, !found.injected.length, 'high', found.injected.join(' | '))
         checks.expect(`nothing breaks the content security policy: ${label}`, !found.violations.length, 'low', found.violations.join(' | '))
@@ -64,7 +73,7 @@ export async function attackBrowser(): Promise<Finding[]> {
       }
     }
 
-    const all = (p: string) => new URLSearchParams({ debug: '', org: p, city: p, country: p, os: p, browser: p, version: p, tz: p, gpu: p, fonts: p, lang: p, ref: p, via: p }).toString()
+    const all = (p: string) => `${new URLSearchParams({ debug: '', org: p, city: p, country: p, os: p, browser: p, version: p, tz: p, gpu: p, fonts: p, lang: p, ref: p, via: p })}&${POLLUTE}`
     for (const [i, payload] of PAYLOADS.entries()) {
       const tag = `payload ${i + 1}`
       // ?debug on the front page, then the panel that lists every signal.
@@ -130,6 +139,9 @@ export async function attackBrowser(): Promise<Finding[]> {
       await page.evaluate((p) => localStorage.setItem('kc:prefs', JSON.stringify({ view: p, personalize: p })), PAYLOADS[0]!)
       await page.reload({ waitUntil: 'load' })
       await ready(page)
+      await page.evaluate(() => localStorage.setItem('kc:prefs', '{"__proto__":{"kcpwn":1},"constructor":{"prototype":{"kcpwn":1}}}'))
+      await page.reload({ waitUntil: 'load' })
+      await ready(page)
       await page.evaluate(() => localStorage.setItem('kc:prefs', '{not json'))
       await page.reload({ waitUntil: 'load' })
       await ready(page)
@@ -160,6 +172,7 @@ export async function attackBrowser(): Promise<Finding[]> {
     }
 
     checks.expect('no dialog was opened by injected script', !dialogs.length, 'high', dialogs.join(' | '))
+    checks.expect("nothing in a link or in storage adds properties to every object (prototype pollution)", !polluted.length, 'medium', polluted.slice(0, 5).join(' | '))
     checks.expect('pages make no requests to other sites', !external.size, 'low', [...external].slice(0, 5).join(' | '))
 
     // --- Clickjacking: another site framing this one ---

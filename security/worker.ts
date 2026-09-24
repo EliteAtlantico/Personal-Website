@@ -48,6 +48,8 @@ export async function attackWorker(): Promise<Finding[]> {
       const host = location ? new URL(location, url).host : ''
       checks.expect(`the www redirect for ${url} stays on the site`, !location || host === 'chaghouri.example', 'medium', `Location: ${location}`)
     }
+    const plain = await call('http://www.chaghouri.example/research/x?y=1')
+    checks.expect('http:// is sent to https:// (and www to the bare domain) in one redirect', plain.status === 308 && plain.headers.get('location') === 'https://chaghouri.example/research/x?y=1', 'low', `${plain.status} to ${plain.headers.get('location')}`)
 
     // --- /api/visitor is for the visitor's own browser only ---
     const visitor = await worker.fetch(Object.assign(new Request(`${SITE}/api/visitor`, { headers: { origin: 'https://evil.example' } }), { cf: { city: 'Toronto' } }), env)
@@ -60,6 +62,7 @@ export async function attackWorker(): Promise<Finding[]> {
       ['an asset from the copy', await call(`${SITE}/assets/known.js`)],
       ['/api/visitor', visitor],
       ['the www redirect', await call('https://www.chaghouri.example/')],
+      ['the https:// redirect', plain],
       ['a page from the copy (desk down)', await worker.fetch(new Request(`${SITE}/`), { ASSETS: copy })],
     ]
     for (const [what, response] of samples) {
