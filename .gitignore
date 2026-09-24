@@ -21,3 +21,6 @@ build/
 *.pem
 *.key
 *.p12
+
+# The hosting notes describe the desk and its weak spots, so they stay local.
+deploy/README.md
