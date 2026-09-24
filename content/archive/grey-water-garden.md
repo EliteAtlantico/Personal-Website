@@ -12,7 +12,7 @@ blurb: >-
   It was built for BP Kuwait's Youth in STEM program.
   The design won "Most Innovative Design."
 stack: [TODO]
-outcomes: ["Most Innovative Design" award]
+outcomes: ['"Most Innovative Design" award']
 links: []
 media: []
 draft: true

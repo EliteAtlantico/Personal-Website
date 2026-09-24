@@ -9,8 +9,8 @@ tags: [education, cs]
 audience: { recruiter: 1, research: 1, dev: 2 }
 blurb: >-
   In summer 2024, I took CS106B Programming Abstractions and SYMSYS100 Minds & Machines at Stanford.
-  TODO — what you took away from it.
-  TODO — one more sentence.
+  TODO: what you took away from it.
+  TODO: one more sentence.
 links: []
 media: []
 draft: true

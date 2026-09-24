@@ -1,0 +1,65 @@
+// Scratch: the globe's interactions, scripted.
+import { appears, box, launch, openPage, ready, serve, sleep, terminalCommand } from './lib'
+const server = await serve()
+const browser = await launch()
+const { page, close } = await openPage(browser, 'desktop')
+const say = (what: string, ok: boolean, detail = '') => console.log(`${ok ? 'ok  ' : 'FAIL'} ${what}${detail ? `: ${detail}` : ''}`)
+try {
+  const errors: string[] = []
+  page.on('pageerror', (e) => errors.push(String(e)))
+  page.on('console', (m) => m.type() === 'error' && errors.push(m.text()))
+  await page.goto(server.url + '/terminal', { waitUntil: 'load' })
+  await ready(page)
+  await terminalCommand(page, 'globe')
+  await appears(page, '.terminal__globe .globe__stage.is-ready')
+  await sleep(600)
+  const labels = () => page.$$eval('.terminal__globe .globe__label.is-shown', (all) => all.map((el) => el.textContent))
+  const shown = await labels()
+  say('labels placed', shown.length > 5, shown.slice(0, 4).join(', '))
+  // Hover a story's title.
+  const target = shown.find((t) => t && t !== 'TORONTO' && t !== 'KUWAIT CITY')!
+  const handle = await page.evaluateHandle((t) => [...document.querySelectorAll('.terminal__globe .globe__label.is-shown')].find((el) => el.textContent === t), target)
+  const r = await page.evaluate((el) => { const b = (el as Element).getBoundingClientRect(); return { x: b.x + b.width / 2, y: b.y + b.height / 2 } }, handle)
+  await handle.dispose()
+  await page.mouse.move(r.x - 30, r.y + 40)
+  await page.mouse.move(r.x, r.y, { steps: 4 })
+  await sleep(200)
+  const caption = await page.$eval('.terminal__globe .globe__caption', (el) => el.textContent ?? '')
+  say('hover lights the story and names it', caption.startsWith(target), `"${caption}"`)
+  const hotOk = await page.$eval('.terminal__globe .globe__label.is-hot', (el) => el.textContent).catch(() => null)
+  say('its label turns hot', hotOk === target)
+  // Click it: the story opens in the reader, over the globe.
+  await page.mouse.down()
+  await page.mouse.up()
+  await appears(page, '.terminal__reader', 5000).then(() => say('click opens the story', true), () => say('click opens the story', false))
+  await page.keyboard.press('q')
+  await sleep(300)
+  // Drag: the view turns.
+  const before = await labels()
+  const stage = await box(page, '.terminal__globe canvas')
+  await page.mouse.move(stage.x + stage.width * 0.3, stage.y + stage.height * 0.5)
+  await page.mouse.down()
+  await page.mouse.move(stage.x + stage.width * 0.6, stage.y + stage.height * 0.55, { steps: 12 })
+  await page.mouse.up()
+  await sleep(700)
+  const after = await labels()
+  say('dragging turns the globe', JSON.stringify(before) !== JSON.stringify(after), `${before.length} → ${after.length} labels`)
+  // Wheel: closer.
+  const spreadOf = () => page.$$eval('.terminal__globe .globe__label.is-shown', (all) => { const xs = all.map((el) => el.getBoundingClientRect().x); return Math.max(...xs) - Math.min(...xs) })
+  const wide = await spreadOf()
+  await page.mouse.move(stage.x + stage.width / 2, stage.y + stage.height / 2)
+  for (let i = 0; i < 6; i++) await page.mouse.wheel({ deltaY: -120 })
+  await sleep(900)
+  say('the wheel zooms in', (await spreadOf()) !== wide)
+  // Keyboard: focusing a story in the list turns the globe to it.
+  await page.focus('.terminal__globe .globe__stories button')
+  await sleep(900)
+  const lit = await page.$eval('.terminal__globe .globe__caption', (el) => el.textContent ?? '')
+  const first = await page.$eval('.terminal__globe .globe__stories button', (el) => el.textContent ?? '')
+  say('focusing a story in the list lights it', lit.startsWith(first), `"${lit}"`)
+  say('no errors', errors.length === 0, errors.join(' | '))
+} finally {
+  await close()
+  await browser.close()
+  server.close()
+}

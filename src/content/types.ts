@@ -109,6 +109,12 @@ export interface SiteConfig {
       /** Outline as [x, y] fractions of the photo's width and height. */
       outline: Array<[number, number]>
     }
+    /**
+     * Silhouette mode's rooftops, found in the photo at build time (content/load.ts), not
+     * written in site.json: "<width>x<height>:" then each column's rooftop row, as the change
+     * from the column before. With it, visitors' browsers never need the photo itself.
+     */
+    skyline?: string
   }
 }
 

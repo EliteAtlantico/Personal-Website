@@ -26,6 +26,25 @@ const START: LayoutCursor = { segmentIndex: 0, graphemeIndex: 0 }
 const SOFT_HYPHEN = String.fromCharCode(0xad)
 const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' })
 
+/** A rectangle of the banner, in CSS pixels. */
+interface Area {
+  left: number
+  top: number
+  right: number
+  bottom: number
+}
+
+/** Stamps of every letter in one weight and colour (see `sheet` in build). */
+interface Sheet {
+  canvas: HTMLCanvasElement
+  /** Each letter's place on the sheet. */
+  at: Map<string, number>
+  /** Size of a stamp, and the room around the letter inside it, in device pixels. */
+  cell: number
+  inset: number
+  columns: number
+}
+
 interface Glyph {
   ch: string
   /** Home position (top left) and advance width. */
@@ -48,17 +67,57 @@ export function layoutPortrait(page: HTMLElement, signal: AbortSignal) {
   const figure = page.querySelector<HTMLElement>('.masthead__banner')
   const img = figure?.querySelector('img')
   if (!figure || !img) return
+  // Can't typeset it: show the photo itself (and the canvas steps aside, so it isn't described twice).
+  const showPhoto = () => {
+    figure.classList.add('is-photo')
+    figure.querySelector('.masthead__portrait')?.remove()
+  }
   const start = () => {
     try {
-      if (!build(page, figure, img, signal)) figure.classList.add('is-photo')
+      if (!build(page, figure, img, signal)) showPhoto()
     } catch (error) {
-      // Can't typeset it: show the photo itself.
-      figure.classList.add('is-photo')
+      showPhoto()
       throw error
     }
   }
-  if (img.complete && img.naturalWidth) start()
+  // A silhouette whose skyline was found when the site was built needs nothing from the photo.
+  if (figure.dataset.skyline || (img.complete && img.naturalWidth)) start()
   else img.addEventListener('load', start, { once: true, signal })
+}
+
+/** The skyline content/load.ts found in the photo: its sampling size, and the rooftop row of each column. */
+export function readSkyline(value: string | undefined) {
+  const match = /^(\d+)x(\d+):(-?\d+(?:,-?\d+)*)$/.exec(value ?? '')
+  if (!match) return null
+  const width = Number(match[1])
+  const rows = new Int16Array(width)
+  let row = 0
+  match[3]!.split(',').forEach((change, x) => {
+    if (x < width) rows[x] = row = x ? row + Number(change) : Number(change)
+  })
+  return { width, height: Number(match[2]), rows }
+}
+
+/** The photo, downscaled once, for its skyline (silhouette mode) or its brightness (tone mode). */
+function samplePhoto(img: HTMLImageElement, silhouette: boolean, band: [number, number]) {
+  const width = Math.min(img.naturalWidth, 1200)
+  const height = Math.max(1, Math.round((img.naturalHeight * width) / img.naturalWidth))
+  const sampler = document.createElement('canvas')
+  sampler.width = width
+  sampler.height = height
+  const sctx = sampler.getContext('2d', { willReadFrequently: true })!
+  sctx.drawImage(img, 0, 0, width, height)
+  const pixels = sctx.getImageData(0, 0, width, height).data
+  sampler.width = sampler.height = 0
+  const rgb = (x: number, y: number): [number, number, number] => {
+    const i = (Math.min(height - 1, Math.max(0, y)) * width + Math.min(width - 1, Math.max(0, x))) * 4
+    return [pixels[i]!, pixels[i + 1]!, pixels[i + 2]!]
+  }
+  const brightness = (fx: number, fy: number) => {
+    const [r, g, b] = rgb(Math.round(fx * width), Math.round(fy * height))
+    return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255
+  }
+  return { width, height, rows: silhouette ? findSkyline(rgb, width, height, band) : null, brightness }
 }
 
 /** Draws the portrait; false if there's nothing to draw it with. */
@@ -74,32 +133,21 @@ function build(page: HTMLElement, figure: HTMLElement, img: HTMLImageElement, si
   const outline = figure.dataset.landmark ? (JSON.parse(figure.dataset.landmark) as Array<[number, number]>) : []
 
   const canvas = figure.querySelector('canvas') ?? figure.appendChild(document.createElement('canvas'))
-  canvas.setAttribute('aria-hidden', 'true')
   canvas.className = 'masthead__portrait'
+  // The canvas stands in for the photo (which may never load), so it carries the photo's description.
+  canvas.setAttribute('role', 'img')
+  canvas.setAttribute('aria-label', img.alt)
   const ctx = canvas.getContext('2d')
   if (!ctx) return false
   const motion = !matchMedia('(prefers-reduced-motion: reduce)').matches
   const dark = matchMedia('(prefers-color-scheme: dark)')
 
-  // The photo, downscaled once, for colour lookups.
-  const sampleW = Math.min(img.naturalWidth, 1200)
-  const sampleH = Math.max(1, Math.round((img.naturalHeight * sampleW) / img.naturalWidth))
-  const sampler = document.createElement('canvas')
-  sampler.width = sampleW
-  sampler.height = sampleH
-  const sctx = sampler.getContext('2d', { willReadFrequently: true })!
-  sctx.drawImage(img, 0, 0, sampleW, sampleH)
-  const pixels = sctx.getImageData(0, 0, sampleW, sampleH).data
-  const rgb = (x: number, y: number): [number, number, number] => {
-    const i = (Math.min(sampleH - 1, Math.max(0, y)) * sampleW + Math.min(sampleW - 1, Math.max(0, x))) * 4
-    return [pixels[i]!, pixels[i + 1]!, pixels[i + 2]!]
-  }
-  const brightness = (fx: number, fy: number) => {
-    const [r, g, b] = rgb(Math.round(fx * sampleW), Math.round(fy * sampleH))
-    return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255
-  }
-  // The rooftops (a sampler row) for each sampler column.
-  const skyline = figure.dataset.mode === 'silhouette' ? findSkyline(rgb, sampleW, sampleH, [bandTop, bandBottom]) : null
+  // The rooftops (a row of the sampled photo) for each column of it: found when the site was built,
+  // or else here, in the photo. Tone mode reads the photo's brightness too.
+  const photo = readSkyline(figure.dataset.skyline) ?? samplePhoto(img, figure.dataset.mode === 'silhouette', [bandTop, bandBottom])
+  const { width: sampleW, height: sampleH } = photo
+  const skyline = photo.rows
+  const brightness = 'brightness' in photo ? photo.brightness : () => 0.5
 
   let glyphs: Glyph[] = []
   let buckets: Glyph[][] = []
@@ -120,6 +168,9 @@ function build(page: HTMLElement, figure: HTMLElement, img: HTMLImageElement, si
   let finaleAt = 0
   let pointer: { x: number; y: number } | null = null
   let frame = 0
+  /** Device pixels per CSS pixel, and the letter stamps for this size and these colours. */
+  let dpr = 1
+  let sheets = new Map<string, Sheet>()
 
   // Photo fractions → strip pixels (the band is squeezed to the strip's height).
   const stripY = (fy: number) => ((fy - bandTop) / (bandBottom - bandTop)) * size.h
@@ -133,7 +184,9 @@ function build(page: HTMLElement, figure: HTMLElement, img: HTMLImageElement, si
     size = { w, h }
     ink = getComputedStyle(figure).color
     accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || ink
-    const dpr = Math.min(2, window.devicePixelRatio || 1)
+    dpr = Math.min(2, window.devicePixelRatio || 1)
+    for (const { canvas: stamps } of sheets.values()) stamps.width = stamps.height = 0
+    sheets = new Map()
     canvas.width = Math.round(w * dpr)
     canvas.height = Math.round(h * dpr)
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
@@ -243,61 +296,139 @@ function build(page: HTMLElement, figure: HTMLElement, img: HTMLImageElement, si
     return y
   }
 
-  const draw = (now = performance.now()) => {
-    const { w, h } = size
-    // Until the finale, nothing marks the landmark: letters flying through its outline are
-    // drawn like any others, and it only takes its colour as its own letters rise.
-    const finale = !introStart || now - introStart >= finaleAt
-    ctx.clearRect(0, 0, w, h)
-    ctx.textBaseline = 'top'
-    ctx.fillStyle = ink
+  /**
+   * A sheet of stamps: every letter the banner uses, drawn once in one weight
+   * and colour at the screen's resolution. fillText lays its text out on every
+   * call, and the banner draws thousands of letters a frame; copying a stamp's
+   * pixels is many times cheaper, and, copied to whole device pixels, looks
+   * exactly the same.
+   */
+  const sheet = (weight: number, color: string): Sheet => {
+    const key = `${weight} ${color}`
+    const known = sheets.get(key)
+    if (known) return known
+    const letters = [...new Set(glyphs.map((g) => g.ch))]
+    const px = font.size * dpr
+    const cell = Math.ceil(px * 1.6)
+    const inset = Math.ceil(px * 0.3)
+    const columns = Math.max(1, Math.ceil(Math.sqrt(letters.length)))
+    const stamps = document.createElement('canvas')
+    stamps.width = columns * cell
+    stamps.height = Math.max(1, Math.ceil(letters.length / columns)) * cell
+    const sctx = stamps.getContext('2d')!
+    sctx.font = canvasFont({ ...font, size: px, weight })
+    sctx.textBaseline = 'top'
+    sctx.fillStyle = color
+    const at = new Map<string, number>()
+    letters.forEach((ch, i) => {
+      at.set(ch, i)
+      sctx.fillText(ch, (i % columns) * cell + inset, Math.floor(i / columns) * cell + inset)
+    })
+    const made = { canvas: stamps, at, cell, inset, columns }
+    sheets.set(key, made)
+    return made
+  }
+  const stamp = (from: Sheet, ch: string, x: number, y: number) => {
+    const i = from.at.get(ch)
+    if (i === undefined) return
+    const { cell, inset, columns } = from
+    ctx.drawImage(from.canvas, (i % columns) * cell, Math.floor(i / columns) * cell, cell, cell, (Math.round(x * dpr) - inset) / dpr, (Math.round(y * dpr) - inset) / dpr, cell / dpr, cell / dpr)
+  }
+
+  /** Draws the letters (those touching `area`, for a partial redraw, or all of them). */
+  const letters = (finale: boolean, area: Area | null) => {
+    const touches = (g: Glyph) => {
+      if (!area) return true
+      const x = g.hx + g.dx
+      const y = g.hy + g.dy
+      return x - font.size < area.right && x + g.w + font.size > area.left && y - font.size < area.bottom && y + font.size * 2 > area.top
+    }
     if (roofs && city) {
       // Sky: a faint hairline texture, wherever a letter shows above the rooftops.
-      ctx.font = canvasFont({ ...font, weight: 300 })
+      const sky = sheet(300, ink)
       ctx.globalAlpha = dark.matches ? 0.16 : 0.12
       for (const g of glyphs) {
+        if (!touches(g)) continue
         const x = g.hx + g.dx
         const y = g.hy + g.dy
-        if (y < roofBottom(roofs, x, x + g.w)) ctx.fillText(g.ch, x, y)
+        if (y < roofBottom(roofs, x, x + g.w)) stamp(sky, g.ch, x, y)
       }
       // City: dense ink, clipped exactly to the rooftops (and around the landmark).
       ctx.save()
       ctx.clip(city)
       if (aroundLandmark && finale) ctx.clip(aroundLandmark, 'evenodd')
-      ctx.font = canvasFont({ ...font, weight: 650 })
+      const dense = sheet(650, ink)
       ctx.globalAlpha = 0.92
       for (const g of glyphs) {
+        if (!touches(g)) continue
         const x = g.hx + g.dx
         const y = g.hy + g.dy
-        if (y + font.size > roofTop(roofs, x, x + g.w)) ctx.fillText(g.ch, x, y)
+        if (y + font.size > roofTop(roofs, x, x + g.w)) stamp(dense, g.ch, x, y)
       }
       ctx.restore()
     } else {
       for (let level = 0; level <= LEVELS; level++) {
         const tone = level / LEVELS
         // Highlights: hairline and faint. Shadows: heavy and solid.
-        ctx.font = canvasFont({ ...font, weight: Math.round(220 + 580 * tone) })
+        const shade = sheet(Math.round(220 + 580 * tone), ink)
         ctx.globalAlpha = 0.07 + 0.93 * tone
-        for (const g of buckets[level]!) ctx.fillText(g.ch, g.hx + g.dx, g.hy + g.dy)
+        for (const g of buckets[level]!) if (touches(g)) stamp(shade, g.ch, g.hx + g.dx, g.hy + g.dy)
       }
     }
     if (landmark && finale) {
       // The landmark: its own letters, heavy and in the accent colour, clipped exactly to its outline.
       ctx.save()
       ctx.clip(landmark)
-      ctx.fillStyle = accent
+      const heavy = sheet(800, accent)
       ctx.globalAlpha = 1
-      ctx.font = canvasFont({ ...font, weight: 800 })
-      for (const g of glyphs) if (g.tower) ctx.fillText(g.ch, g.hx + g.dx, g.hy + g.dy)
+      for (const g of glyphs) if (g.tower && touches(g)) stamp(heavy, g.ch, g.hx + g.dx, g.hy + g.dy)
       ctx.restore()
     }
     ctx.globalAlpha = 1
   }
 
-  // Frame loop: the intro swarm, then cursor pushes; stops when everything is home.
+  /** The whole banner, or only `area` (where letters moved), cleared and drawn again. */
+  const draw = (now = performance.now(), area: Area | null = null) => {
+    // Until the finale, nothing marks the landmark: letters flying through its outline are
+    // drawn like any others, and it only takes its colour as its own letters rise.
+    const finale = !introStart || now - introStart >= finaleAt
+    if (!area) {
+      ctx.clearRect(0, 0, size.w, size.h)
+      letters(finale, null)
+      return
+    }
+    // To whole device pixels, so the edge of the redrawn patch doesn't show.
+    const left = Math.floor(area.left * dpr) / dpr
+    const top = Math.floor(area.top * dpr) / dpr
+    const width = Math.ceil(area.right * dpr) / dpr - left
+    const height = Math.ceil(area.bottom * dpr) / dpr - top
+    ctx.save()
+    ctx.beginPath()
+    ctx.rect(left, top, width, height)
+    ctx.clip()
+    ctx.clearRect(left, top, width, height)
+    letters(finale, { left, top, right: left + width, bottom: top + height })
+    ctx.restore()
+  }
+
+  // Frame loop: the intro swarm, then cursor pushes; stops as soon as nothing moves.
+  // During the intro everything moves, so everything is drawn; after it, only the
+  // patch where letters moved (around the cursor) is.
+  let finaleShown = false
   const tick = (now: number) => {
-    let busy = introStart > 0 && now - introStart < introEnd
+    const intro = introStart > 0 && now - introStart < introEnd
+    let busy = intro
     const elapsed = now - introStart
+    let moved: Area | null = null
+    const include = (g: Glyph, dx: number, dy: number) => {
+      const x = g.hx + dx
+      const y = g.hy + dy
+      moved ??= { left: x, top: y, right: x, bottom: y }
+      moved.left = Math.min(moved.left, x - font.size)
+      moved.right = Math.max(moved.right, x + g.w + font.size)
+      moved.top = Math.min(moved.top, y - font.size)
+      moved.bottom = Math.max(moved.bottom, y + font.size * 2)
+    }
     for (const g of glyphs) {
       if (introStart && elapsed < g.delay + g.dur) {
         const t = Math.max(0, Math.min(1, (elapsed - g.delay) / g.dur))
@@ -306,6 +437,7 @@ function build(page: HTMLElement, figure: HTMLElement, img: HTMLImageElement, si
         g.dy = g.oy * (1 - e)
         continue
       }
+      const [x0, y0] = [g.dx, g.dy]
       let tx = 0
       let ty = 0
       if (pointer) {
@@ -325,9 +457,19 @@ function build(page: HTMLElement, figure: HTMLElement, img: HTMLImageElement, si
         g.dx = tx
         g.dy = ty
       }
+      if (g.dx !== x0 || g.dy !== y0) {
+        include(g, x0, y0)
+        include(g, g.dx, g.dy)
+      }
     }
-    draw(now)
-    frame = busy || pointer ? requestAnimationFrame(tick) : 0
+    // The finale changes how the landmark's letters look everywhere, so that frame is drawn whole.
+    const finale = !introStart || elapsed >= finaleAt
+    const whole = intro || finale !== finaleShown
+    finaleShown = finale
+    const patch = moved as Area | null
+    if (whole || (patch && (patch.right - patch.left) * (patch.bottom - patch.top) > size.w * size.h * 0.5)) draw(now)
+    else if (patch) draw(now, patch)
+    frame = busy ? requestAnimationFrame(tick) : 0
   }
   const animate = () => {
     if (!frame) frame = requestAnimationFrame(tick)

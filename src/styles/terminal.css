@@ -134,41 +134,66 @@ body:has(> #app > .page--terminal:last-child) {
   max-width: 120ch;
 }
 
-/* --- The dashboard: the paper's front page as panes --- */
+/* --- The dashboard: the paper's front page as panes, compact enough that the prompt still fits under it on a laptop --- */
 
 .t-dash {
   display: grid;
-  gap: 22px;
-  margin: 14px 0 16px;
+  gap: 16px;
+  margin: 12px 0 14px;
+  font-size: 14px;
+  line-height: 1.45;
 }
 
-/* The lead story on the left, Now and About stacked beside it. */
+/* The top row: the lead story, Now over About beside it, then the map. */
 .t-dash__top {
   display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
-  gap: 22px;
+  grid-template-areas: 'lead now map' 'lead about map';
+  grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
 }
 
-/* A column, so the rain can take whatever room the lead story leaves. */
+/* Columns, so the rain (and the globe) can take whatever room is left. */
 .t-pane--lead {
   display: flex;
   flex-direction: column;
-  grid-row: span 2;
+  grid-area: lead;
 }
 
-/* The desks, as many side by side as fit. */
+.t-pane--now {
+  grid-area: now;
+}
+
+.t-pane--about {
+  grid-area: about;
+}
+
+.t-pane--map {
+  display: flex;
+  flex-direction: column;
+  grid-area: map;
+}
+
+/* The desks, three across (wide enough that titles rarely need cutting short), fewer on smaller screens. */
 .t-dash__desks {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 34ch), 1fr));
-  gap: 22px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
 }
 
 /* A pane: a thin box with its name set into the top border, like tmux. */
 .t-pane {
   position: relative;
   min-width: 0;
-  padding: 16px 18px 12px;
+  padding: 14px 14px 10px;
   border: 1px solid var(--t-line);
+}
+
+/* A long blurb stops after a few lines; the whole story is a click away. */
+.t-clamp {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: var(--clamp);
 }
 
 .t-pane__title,
@@ -198,14 +223,14 @@ body:has(> #app > .page--terminal:last-child) {
 }
 
 .t-pane .t-line + .t-line {
-  margin-top: 4px;
+  margin-top: 3px;
 }
 
 .t-pane__links {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px 20px;
-  margin: 12px 0 0;
+  gap: 4px 14px;
+  margin: 8px 0 0;
 }
 
 /* Story rows: the whole row lights up like a menu item. */
@@ -242,18 +267,41 @@ body:has(> #app > .page--terminal:last-child) {
   color: var(--t-accent);
 }
 
+.t-row__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .t-row__detail {
   flex: none;
   color: var(--t-dim);
 }
 
+@media (max-width: 1100px) {
+  .t-dash__top {
+    grid-template-areas: 'lead now' 'lead about' 'map map';
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  }
+
+  .t-dash__desks {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 900px) {
   .t-dash__top {
+    grid-template-areas: none;
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .t-pane--lead {
-    grid-row: auto;
+  .t-dash__desks {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .t-dash__top > .t-pane {
+    grid-area: auto;
   }
 
   /* Stacked, the lead has no room to spare (cmatrix still rains). */
@@ -268,7 +316,7 @@ body:has(> #app > .page--terminal:last-child) {
 .t-rain {
   position: relative;
   flex: 1 1 auto;
-  margin: 14px -18px -12px;
+  margin: 10px -14px -10px;
   pointer-events: none;
   -webkit-mask-image: linear-gradient(to bottom, transparent, #000 28px, #000 calc(100% - 8px), transparent);
   mask-image: linear-gradient(to bottom, transparent, #000 28px, #000 calc(100% - 8px), transparent);
@@ -276,10 +324,11 @@ body:has(> #app > .page--terminal:last-child) {
 
 /* At least a few rows, once there's a script to make it rain. */
 .js .t-pane--lead .t-rain {
-  min-height: calc(7 * 17px);
+  min-height: calc(3 * 17px);
 }
 
-.t-rain canvas {
+.t-rain canvas,
+.t-rain__picture {
   position: absolute;
   inset: 0;
   width: 100%;

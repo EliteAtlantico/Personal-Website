@@ -56,10 +56,18 @@ function banner(site: Site) {
     settings.landmark
       ? ` data-landmark="${esc(JSON.stringify(settings.landmark.outline))}" data-landmark-label="${esc(settings.landmark.label)}"`
       : '',
+    settings.skyline ? ` data-skyline="${esc(settings.skyline)}"` : '',
   ].join('')
-  return coverFigure(site.banner, 'masthead__banner', 3, '(max-width: 1280px) 100vw, 1280px')
-    .replace('loading="lazy"', 'loading="eager" fetchpriority="high"')
-    .replace('<figure class="masthead__banner" style="', `<figure class="masthead__banner"${attrs} style="--banner-y: ${(((top + bottom) / 2) * 100).toFixed(1)}%; `)
+  const figure = coverFigure(site.banner, 'masthead__banner', 3, '(max-width: 1280px) 100vw, 1280px')
+  return (
+    // With the skyline worked out ahead of time, the type is drawn without the photo, which then only
+    // loads (lazily) for visitors who see it: no JavaScript, or a browser that can't draw the type.
+    // Tone mode reads the photo's pixels, so it needs the photo straight away.
+    (settings.skyline ? figure : figure.replace('loading="lazy"', 'loading="eager" fetchpriority="high"')).replace(
+      '<figure class="masthead__banner" style="',
+      `<figure class="masthead__banner"${attrs} style="--banner-y: ${(((top + bottom) / 2) * 100).toFixed(1)}%; `,
+    )
+  )
 }
 
 export function footer(site: Site) {

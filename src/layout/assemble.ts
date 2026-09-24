@@ -3,6 +3,7 @@
 // the same pace as the bio's snowfall (see pace.ts), then the page is still. Each
 // letter's landing spot is measured from the headline's own (copyfitted) lines,
 // so it lands exactly where the real text is before the real text is revealed.
+import { measuring } from './fonts'
 import { intro } from './pace'
 
 export function assembleHeadlines(page: HTMLElement) {
@@ -19,7 +20,7 @@ const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' })
 
 function assemble(el: HTMLElement, delay: number) {
   const style = getComputedStyle(el)
-  const ctx = document.createElement('canvas').getContext('2d')
+  const ctx = measuring()
   if (!ctx) return
   ctx.font = `${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`
   const tracking = style.letterSpacing === 'normal' ? 0 : parseFloat(style.letterSpacing)

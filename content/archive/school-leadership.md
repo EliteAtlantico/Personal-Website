@@ -11,7 +11,7 @@ blurb: >-
   As President of the Science National Honor Society, I ran the "STEM for Change" hackathon.
   I also served as NHS Treasurer and chaired Model UN.
   I spoke at TEDxYouth@ASK.
-outcomes: [TODO — TEDx talk topic/link]
+outcomes: ["TODO: TEDx talk topic/link"]
 links: []
 media: []
 draft: true

@@ -21,6 +21,8 @@ export interface Line {
   hang?: number
   /** Lay the segments out in columns, like ls does. */
   grid?: boolean
+  /** Show at most this many lines (the rest is a click away, like a story's blurb). */
+  clamp?: number
   /** Not text at all: a dashboard of panes, laid out like the paper's front page. */
   panes?: Pane[]
 }
@@ -38,14 +40,16 @@ export interface Pane {
   title: string
   /** Dim text at the right end of the title bar. */
   note?: string
-  /** Where it sits: the lead story, the column beside it, or with the desks below (the default). */
-  area?: 'lead' | 'side'
+  /** Where it sits in the top row (the lead story, Now, About, the map), or with the desks below (the default). */
+  area?: 'lead' | 'now' | 'about' | 'map'
   lines?: Line[]
   rows?: Row[]
   /** Links along the bottom of the pane. */
   links?: Segment[]
   /** A story (by slug) whose words rain down the pane's spare room (rain.ts). */
   rain?: string
+  /** The globe of where the stories happened (src/globe) fills the pane; its lines say the same in words. */
+  globe?: boolean
 }
 
 export const seg = (text: string, style?: Style): Segment => (style ? { text, style } : { text })

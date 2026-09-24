@@ -147,6 +147,12 @@
   opacity: 0;
 }
 
+/* A silhouette banner is drawn without the photo (its skyline was found when the site was built),
+   so the photo isn't even downloaded: a lazy image that isn't displayed never loads. */
+.js .masthead__banner[data-skyline]:not(.is-photo) img {
+  display: none;
+}
+
 /* Exactly covers the strip; nothing is drawn outside it. */
 .masthead__portrait {
   position: absolute;

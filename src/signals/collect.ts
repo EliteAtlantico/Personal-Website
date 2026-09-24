@@ -134,17 +134,30 @@ export function chipName(renderer: string): string | undefined {
   return [...named].sort((a, b) => b.length - a.length)[0] ?? (parts[0] || undefined)
 }
 
-/** What Cloudflare saw (city, network), from the edge worker once the site is hosted (stage 6). */
-export async function network(): Promise<Pick<Signals, 'city' | 'region' | 'country' | 'org' | 'eu'>> {
-  try {
-    const response = await fetch('/api/visitor', { signal: AbortSignal.timeout(400), headers: { accept: 'application/json' } })
-    if (!response.ok || !response.headers.get('content-type')?.includes('json')) return {}
-    const data = (await response.json()) as Record<string, unknown>
-    const text = (key: string) => (typeof data[key] === 'string' && data[key] ? (data[key] as string) : undefined)
-    return { city: text('city'), region: text('region'), country: text('country'), org: text('org'), eu: data.eu === true }
-  } catch {
-    return {}
+declare global {
+  interface Window {
+    /** /api/visitor's answer, asked for by the page's inline script (index.html) as soon as the page starts loading. */
+    __visitor?: Promise<Record<string, unknown>>
   }
+}
+
+let visitor: Promise<Record<string, unknown>> | undefined
+
+/** What the edge worker says about this visit, asked once: usually already on its way (see index.html). */
+function askEdge() {
+  visitor ??=
+    window.__visitor ??
+    fetch('/api/visitor', { headers: { accept: 'application/json' } })
+      .then((response) => (response.ok && response.headers.get('content-type')?.includes('json') ? (response.json() as Promise<Record<string, unknown>>) : {}))
+      .catch(() => ({}))
+  return visitor
+}
+
+/** What Cloudflare saw (city, network), from the edge worker (edge/worker.ts). Never waited on for more than 400 ms. */
+export async function network(): Promise<Pick<Signals, 'city' | 'region' | 'country' | 'org' | 'eu'>> {
+  const data = await Promise.race([askEdge(), new Promise<Record<string, unknown>>((resolve) => setTimeout(() => resolve({}), 400))])
+  const text = (key: string) => (typeof data[key] === 'string' && data[key] ? (data[key] as string) : undefined)
+  return { city: text('city'), region: text('region'), country: text('country'), org: text('org'), eu: data.eu === true }
 }
 
 export function osOf(ua: string, platform?: string): string | undefined {

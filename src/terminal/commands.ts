@@ -6,6 +6,7 @@
 // also runs in tests.
 import { relatedItems } from '../content/related'
 import type { Item, Site } from '../content/types'
+import { since, type Reading } from '../desk'
 import { formatShortDate } from '../render/html'
 import type { Signals } from '../signals/collect'
 import type { Decision } from '../signals/decide'
@@ -21,6 +22,8 @@ export interface Env {
   read(title: string, lines: Line[]): void
   /** Full-screen digital rain made of the site's words (rain.ts), until it's closed. */
   matrix(): void
+  /** The globe of where the stories happened (src/globe), full screen, until it's closed. */
+  globe(): void
   /** Open a link in a new tab. */
   openUrl(url: string): void
   clear(): void
@@ -37,6 +40,8 @@ export interface Env {
   visitor(): Visitor | undefined
   /** Turns personalizing on or off, remembered in their browser. */
   personalize(on: boolean): void
+  /** The desk serving the site, if it's been heard from (src/desk.ts). */
+  desk(): Reading | null
 }
 
 /** What the site knows about the visitor, all of it read in their browser (src/signals). */
@@ -195,6 +200,8 @@ export function createShell(site: Site, env: Env): Shell {
     })
 
   const neofetch = (): Line[] => {
+    const reading = env.desk()
+    const live = reading?.desk.live ? (reading as Reading & { desk: { live: true; uptime: number } }) : null
     const bySlug = (slug: string) => site.items.find((item) => item.slug === slug)
     const study = bySlug('uoft')
     const lab = bySlug('mersivity')
@@ -211,6 +218,7 @@ export function createShell(site: Site, env: Env): Shell {
       lab?.role && field('Research', lab.role),
       work.length > 0 && field('Work', work.join(' · ')),
       rig && rig.stack.length > 1 && field('Setup', rig.stack.slice(0, 2).join(' + ').replace('Arch Linux', 'Arch Linux (btw)')),
+      live && field('Uptime', `${since(live.desk.uptime + (env.now().getTime() - live.at) / 1000)} (it's serving you this)`),
       field('Stack', topStack(site.items, 6).join(', ')),
       field('Stories', [`${stories}  `, runSeg('ls', 'ls to browse')]),
       blank(),
@@ -230,7 +238,7 @@ export function createShell(site: Site, env: Env): Shell {
       name: 'dashboard',
       summary: 'everything at a glance, like the front page',
       aliases: ['home', 'front'],
-      run: () => [...dashboard(env.site(), { live: true }), blank(), tip()],
+      run: () => [...dashboard(env.site(), { live: true }), tip()],
     },
     {
       name: 'help',
@@ -367,6 +375,16 @@ export function createShell(site: Site, env: Env): Shell {
     },
     { name: 'neofetch', summary: 'me, at a glance', aliases: ['fastfetch'], run: neofetch },
     {
+      name: 'globe',
+      summary: 'where the stories happened, on a globe (q closes it)',
+      details: ['Drag to turn it and scroll to zoom. Pick a dot, or Tab to a story and press Enter, to read it.'],
+      aliases: ['map', 'earth', 'world'],
+      run: () => {
+        env.globe()
+        return []
+      },
+    },
+    {
       name: 'cmatrix',
       summary: 'digital rain made of these stories (q stops it)',
       details: ["Move your mouse through it. It's set with pretext, one line of a story per drop."],
@@ -417,9 +435,20 @@ export function createShell(site: Site, env: Env): Shell {
     },
     {
       name: 'uptime',
-      summary: 'how long this copy of the site has been up',
+      summary: 'how long the desk serving this has been up',
       run: () => {
         const now = env.now()
+        const reading = env.desk()
+        if (reading?.desk.live) {
+          const { desk } = reading
+          const seconds = desk.uptime + (now.getTime() - reading.at) / 1000
+          const cpu = desk.cpu === null ? '' : `, CPU at ${desk.cpu}°C`
+          return [
+            line(` ${clock(now)} up ${upFor(seconds)},  1 user,  load average: ${desk.load.map((n) => n.toFixed(2)).join(', ')}`),
+            line(seg(`Served live from ${desk.name} (${desk.system} ${desk.kernel}, ${desk.cores} cores${cpu}).`, 'dim')),
+          ]
+        }
+        if (reading) return [line(seg(`My desk is asleep, so this is the copy Cloudflare keeps. It was built ${shortDate(site.builtAt)}.`, 'dim'))]
         const built = new Date(site.builtAt)
         const minutes = Math.max(1, Math.round((now.getTime() - built.getTime()) / 60000))
         const up = minutes >= 1440 ? `${Math.floor(minutes / 1440)} day${minutes >= 2880 ? 's' : ''}` : minutes >= 60 ? `${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, '0')}` : `${minutes} min`
@@ -448,7 +477,7 @@ export function createShell(site: Site, env: Env): Shell {
       run: ([name]) => {
         switch (normalize(name ?? '')) {
           case '':
-            return [line('views: ', runSeg('view paper', 'paper'), seg('  terminal (here)  globe (coming soon)', 'dim'))]
+            return [line('views: ', runSeg('view paper', 'paper'), seg('  terminal (here). The globe is a command: ', 'dim'), runSeg('globe'))]
           case 'paper':
           case 'newspaper':
           case 'front':
@@ -457,7 +486,9 @@ export function createShell(site: Site, env: Env): Shell {
           case 'terminal':
             return [line(seg("You're already in the terminal.", 'dim'))]
           case 'globe':
-            return [line(seg("The globe view isn't built yet.", 'dim'))]
+          case 'map':
+            env.globe()
+            return []
           default:
             return [line(seg(`view: no view called ${name}. Try `, 'error'), runSeg('view paper'))]
         }
@@ -553,7 +584,7 @@ export function createShell(site: Site, env: Env): Shell {
   /** The dashboard, from ~, as if it had just been typed. */
   function home(): Line[] {
     cwd = []
-    return [echo('dashboard'), ...dashboard(env.site(), { live: true }), blank(), tip()]
+    return [echo('dashboard'), ...dashboard(env.site(), { live: true }), tip()]
   }
 
   /** The screen at login, saying why it's a terminal if the site chose that for them. */
@@ -784,3 +815,12 @@ function unixDate(d: Date) {
 
 // "KC" in figlet's standard font.
 const LOGO = [' _  __  ____ ', '| |/ / / ___|', "| ' / | |    ", '| . \\ | |___ ', '|_|\\_\\ \\____|']
+
+/** Uptime the way uptime(1) says it: "1 day, 23:12", "3:05", "12 min". */
+function upFor(seconds: number) {
+  const minutes = Math.floor(seconds / 60)
+  const days = Math.floor(minutes / 1440)
+  const clockPart = `${Math.floor((minutes % 1440) / 60)}:${String(minutes % 60).padStart(2, '0')}`
+  if (days) return `${days} day${days === 1 ? '' : 's'}, ${clockPart}`
+  return minutes >= 60 ? clockPart : `${minutes} min`
+}

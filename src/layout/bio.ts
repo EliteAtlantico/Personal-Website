@@ -6,7 +6,7 @@
 //    drift back into place.
 // The chip is exactly as tall as the text needs (found by binary search).
 import { flow, type PositionedLine } from './flow'
-import { FAMILY, canvasFont, type FontSpec } from './fonts'
+import { FAMILY, canvasFont, measuring, type FontSpec } from './fonts'
 import { circleObstacle, insideBand, type Point } from './geometry'
 import { onWidth } from './observe'
 import { intro } from './pace'
@@ -65,10 +65,16 @@ export function layoutBio(page: HTMLElement, signal: AbortSignal) {
   die.setAttribute('aria-label', 'KC stamp. Drag it, or use the arrow keys, and the bio flows around it.')
 
   // Word widths come from the same canvas measurement pretext uses.
-  const ctx = document.createElement('canvas').getContext('2d')!
-  ctx.font = canvasFont(FONT)
+  const ctx = measuring()!
   const widths = new Map<string, number>()
-  const measure = (text: string) => widths.get(text) ?? widths.set(text, ctx.measureText(text).width).get(text)!
+  const measure = (text: string) => {
+    let width = widths.get(text)
+    if (width === undefined) {
+      ctx.font = canvasFont(FONT)
+      widths.set(text, (width = ctx.measureText(text).width))
+    }
+    return width
+  }
   const space = measure(' ')
 
   const state = { width: 0, height: 0, radius: 40, dieX: Number.NaN, dieYRatio: 0.42, dieY: 0 }
@@ -333,9 +339,12 @@ export function layoutBio(page: HTMLElement, signal: AbortSignal) {
           }
         })
       }
+      // This drag's listeners, all removed together when it ends (however it ends).
+      const drag = new AbortController()
       const up = () => {
+        drag.abort()
+        cancelAnimationFrame(pending)
         die.classList.remove('is-dragging')
-        die.removeEventListener('pointermove', move)
         // Settle: shortest chip again, with the die where it was dropped.
         const settled = fit(state.dieY)
         state.dieYRatio = state.dieY / settled.height
@@ -343,9 +352,10 @@ export function layoutBio(page: HTMLElement, signal: AbortSignal) {
         clampDie()
         place(settled.lines)
       }
-      die.addEventListener('pointermove', move)
-      die.addEventListener('pointerup', up, { once: true })
-      die.addEventListener('pointercancel', up, { once: true })
+      const listen = { signal: AbortSignal.any([drag.signal, signal]) }
+      die.addEventListener('pointermove', move, listen)
+      die.addEventListener('pointerup', up, listen)
+      die.addEventListener('pointercancel', up, listen)
     },
     { signal },
   )

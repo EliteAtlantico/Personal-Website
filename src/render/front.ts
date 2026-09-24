@@ -4,6 +4,7 @@
 // shows up in a final "More" desk, so an item can never silently disappear.
 import type { Desk, Item, Site } from '../content/types'
 import { footer, masthead } from './chrome'
+import { globeTile } from './globe'
 import { esc } from './html'
 import { itemPath } from './paths'
 import { tile } from './tiles'
@@ -31,6 +32,7 @@ export function renderFront(site: Site) {
     ${tile(site, lead, 'lead', 2)}
     ${jump(lead)}
     ${secondary.length ? `<div class="lead__secondary">${secondary.map((item) => tile(site, item)).join('')}</div>` : ''}
+    ${globeTile(site)}
   </section>` : ''}
   <aside class="rail" aria-label="Also on the front page">
     ${bio(site)}

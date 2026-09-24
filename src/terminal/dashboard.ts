@@ -3,6 +3,7 @@
 // story a row. In the shell a row opens the story in the terminal's reader;
 // on the static /terminal page (no JavaScript) it links to the story's page.
 import type { Item, Site } from '../content/types'
+import { globeSummary } from '../render/globe'
 import { formatShortDate } from '../render/html'
 import { deskName, itemPath } from '../render/paths'
 import { fileName } from './fs'
@@ -31,7 +32,7 @@ export function dashboard(site: Site, { live }: { live: boolean }): Line[] {
       title: `lead · ${deskName(site, lead).toLowerCase()}`,
       note: lead.publication?.venue,
       area: 'lead',
-      lines: [line(seg(lead.headline ?? lead.title, 'heading')), line(lead.blurb), ...(meta ? [line(seg(meta, 'dim'))] : [])],
+      lines: [line(seg(lead.headline ?? lead.title, 'heading')), { ...line(lead.blurb), clamp: 4 }, ...(meta ? [line(seg(meta, 'dim'))] : [])],
       links: [link('read the story', `open ${storyPath(lead)}`, itemPath(lead))],
       rain: lead.slug,
     })
@@ -41,13 +42,14 @@ export function dashboard(site: Site, { live }: { live: boolean }): Line[] {
     panes.push({
       title: 'now',
       note: now.updated ? `updated ${formatShortDate(now.updated).replace(/, \d{4}$/, '')}` : undefined,
-      area: 'side',
-      lines: [line(now.blurb)],
+      area: 'now',
+      lines: [{ ...line(now.blurb), clamp: 4 }],
+      links: [link('read it all', `open ${storyPath(now)}`, itemPath(now))],
     })
   }
   panes.push({
     title: 'about',
-    area: 'side',
+    area: 'about',
     lines: [line(seg(site.config.author, 'strong')), line(site.config.tagline), line(seg(site.config.edition, 'dim'))],
     links: [
       link('about.md', 'open ~/about.md', '/'),
@@ -55,6 +57,15 @@ export function dashboard(site: Site, { live }: { live: boolean }): Line[] {
       link('contact', 'contact', email),
       ...(live ? [link('neofetch', 'neofetch', '/')] : []),
     ],
+  })
+  // Where it all happened: a globe fills the pane, and `globe` opens it full screen.
+  panes.push({
+    title: 'map',
+    note: `${site.items.length} stories`,
+    area: 'map',
+    lines: [line(globeSummary(site))],
+    links: live ? [link('full screen', 'globe', '/')] : [],
+    globe: true,
   })
   for (const desk of site.config.desks) {
     const stories = items(desk.items)

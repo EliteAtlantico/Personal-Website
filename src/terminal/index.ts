@@ -4,30 +4,41 @@
 // screen (like `less`) until you close it. The lead story rains down its
 // pane (rain.ts), and cmatrix rains the whole site full screen. The session
 // (history, current folder, everything on screen) outlives the page, so
-// switching views and coming back finds the terminal as you left it.
+// switching views and coming back finds the terminal as you left it. The
+// dashboard's map pane holds the globe of where the stories happened
+// (src/globe), and `globe` opens it full screen.
 import type { Item, Site } from '../content/types'
+import { sturdy } from '../enhance'
+import type { Globe } from '../globe'
+import { frontOrder } from '../globe/places'
+import { fontsReady } from '../layout/fonts'
+import { GLOBE_HINT, globeSummary } from '../render/globe'
 import { navigate } from '../router'
+import { desk, deskSoFar } from '../desk'
 import { calm, choose, edition, forget, seen } from '../signals'
 import { bodyLines } from './body'
 import { createShell, plainText, type Env, type Shell } from './commands'
+import { storyPath } from './dashboard'
 import { barDate, HOST, USER } from './fs'
 import { linesHtml, segmentHtml } from './html'
 import { seg, type Line } from './output'
+import { keepAsPicture } from '../ui/picture'
 import { startRain, type Rain } from './rain'
 
 /** What survives leaving the page: the shell (history, folder), the screen's contents, and the site it reads. */
 let session: { shell: Shell; output: HTMLElement; site: Site } | null = null
 /** The terminal on the page right now, for the shell's Env to reach. */
-let mounted: { output: HTMLElement; columns(): number; read(title: string, lines: Line[]): void; matrix(): void } | null = null
+let mounted: { output: HTMLElement; columns(): number; read(title: string, lines: Line[]): void; matrix(): void; globe(): void } | null = null
 
 const env: Env = {
-  // `view paper` is a choice worth remembering, like the view links.
+  // `view paper` is a choice worth remembering, like the view links (the globe never opens by itself).
   navigate: (path) => {
-    void choose({ view: path === '/terminal' ? 'terminal' : 'paper' })
+    if (path === '/') void choose({ view: 'paper' })
     navigate(path)
   },
   read: (title, lines) => mounted?.read(title, lines),
   matrix: () => mounted?.matrix(),
+  globe: () => mounted?.globe(),
   openUrl: (url) => {
     if (url.startsWith('mailto:')) location.href = url
     else window.open(url, '_blank', 'noopener')
@@ -47,6 +58,7 @@ const env: Env = {
     return current && { ...current, signals: seen() }
   },
   personalize: (on) => void choose({ personalize: on }),
+  desk: deskSoFar,
 }
 
 /** Old lines scroll away past this many. */
@@ -59,6 +71,8 @@ const siteText = (site: Site) => site.items.map(storyText).join(' ')
 
 /** `site` is the visitor's edition of it (src/signals). */
 export function mountTerminal(section: HTMLElement, signal: AbortSignal, site: Site) {
+  // Ask the desk how it's doing now, so `uptime` has an answer by the time anyone types it.
+  void desk()
   const screen = section.querySelector<HTMLElement>('.terminal__screen')
   // The status bar: the window's title follows the current folder, and the clock ticks.
   const page = section.closest('.page') ?? document
@@ -107,14 +121,27 @@ export function mountTerminal(section: HTMLElement, signal: AbortSignal, site: S
   const scrollDown = () => {
     screen.scrollTop = screen.scrollHeight
   }
+  /** Down to the prompt, now and once more after this frame's layout (the rain and the globe settle their sizes). */
+  const promptAtBottom = () => {
+    scrollDown()
+    requestAnimationFrame(scrollDown)
+  }
   /**
    * After a command: new output taller than the screen is shown from its first
    * line (like a pager would), shorter output keeps the prompt in view, and a
-   * cleared screen starts again from the top.
+   * cleared screen starts again from the top. A dashboard is the exception:
+   * like a real terminal's, it scrolls up out of the way, the prompt at the
+   * bottom of the screen.
    */
   const reveal = (first: Element | null) => {
     if (!first || !output.contains(first)) {
       screen.scrollTop = 0
+      return
+    }
+    const boards = output.querySelectorAll('.t-dash')
+    const board = boards[boards.length - 1]
+    if (board && first.compareDocumentPosition(board) & Node.DOCUMENT_POSITION_FOLLOWING) {
+      promptAtBottom()
       return
     }
     const top = first.getBoundingClientRect().top
@@ -129,32 +156,57 @@ export function mountTerminal(section: HTMLElement, signal: AbortSignal, site: S
     const hosts = output.querySelectorAll<HTMLElement>('.t-rain')
     const host = hosts[hosts.length - 1]
     if (host && rain?.host === host) return
-    rain?.stop()
+    // The dashboard it rained on stays up the scrollback, as a picture of its last frame.
+    rain?.stop(true)
     rain = null
     const item = host && site.items.find((i) => i.slug === host.dataset.story)
     if (!host || !item) return
     rain = { host, ...startRain(host, storyText(item), { still: calm() }) }
-    if (overlay) rain.pause(true)
+    if (covered()) rain.pause(true)
   }
 
-  // --- Overlays, full screen over the terminal until q / Esc / back: the reader (a story, like less) and cmatrix ---
-  let overlay: HTMLElement | null = null
-  let stopOverlay = () => {}
-  /** Shows an overlay (instead of any other), holding the dashboard's rain still underneath. */
+  // The newest dashboard's map pane has a live globe; older ones up the scrollback keep a picture of theirs.
+  let map: { host: HTMLElement; globe: Globe | null } | null = null
+  const mapOn = () => {
+    const hosts = output.querySelectorAll<HTMLElement>('.t-pane [data-globe]')
+    const host = hosts[hosts.length - 1]
+    if (host && map?.host === host) return
+    map?.globe?.dispose((canvas, done) => keepAsPicture(canvas, 'globe__picture', done))
+    map = null
+    if (!host || !sturdy()) return
+    const entry: { host: HTMLElement; globe: Globe | null } = { host, globe: null }
+    map = entry
+    void globeModule().then((module) => {
+      if (!module || map !== entry || signal.aborted) return
+      entry.globe = module.mountGlobe(host, { site, mode: 'embed', open: (item) => execute(`open ${storyPath(item)}`) })
+      if (covered()) entry.globe?.pause(true)
+    })
+  }
+
+  // --- Overlays, full screen over the terminal until q / Esc / back: the reader (a story, like less), cmatrix and the globe.
+  // They stack: a story opened from the globe opens over it, and closing the story goes back to the globe.
+  const overlays: Array<{ el: HTMLElement; stop: () => void }> = []
+  const covered = () => overlays.length > 0
+  /** Shows an overlay on top, holding the dashboard's rain and globe still underneath. */
   const cover = (el: HTMLElement, stop = () => {}) => {
-    stopOverlay()
-    overlay?.remove()
-    overlay = el
-    stopOverlay = stop
+    overlays.push({ el, stop })
     section.append(el)
     rain?.pause(true)
+    map?.globe?.pause(true)
   }
   const closeOverlay = () => {
-    stopOverlay()
-    stopOverlay = () => {}
-    overlay?.remove()
-    overlay = null
+    const top = overlays.pop()
+    top?.stop()
+    top?.el.remove()
+    // Its canvases (cmatrix's rain) hand their bitmaps back now, not whenever they're collected.
+    for (const canvas of top?.el.querySelectorAll('canvas') ?? []) canvas.width = canvas.height = 0
+    const under = overlays.at(-1)
+    if (under) {
+      under.el.focus({ preventScroll: true })
+      return
+    }
     rain?.pause(false)
+    map?.globe?.pause(false)
     if (fine) focusPrompt()
   }
   const read = (name: string, lines: Line[]) => {
@@ -189,11 +241,37 @@ export function mountTerminal(section: HTMLElement, signal: AbortSignal, site: S
     cover(screenful, () => falling.stop())
     screenful.focus({ preventScroll: true })
   }
-  mounted = { output, columns: () => Math.max(20, Math.floor(output.clientWidth / charWidth(output))), read, matrix }
+  /** The globe, full screen. Its stories are buttons too (for the keyboard); picking one opens it in the reader, over the globe. */
+  const globe = () => {
+    const screenful = document.createElement('div')
+    screenful.className = 'terminal__globe'
+    screenful.tabIndex = -1
+    screenful.setAttribute('role', 'dialog')
+    screenful.setAttribute('aria-label', 'Globe: where the stories happened')
+    const stories = frontOrder(site)
+      .map((item) => `<li><button type="button" data-run="open ${escapeHtml(storyPath(item))}" data-slug="${escapeHtml(item.slug)}">${escapeHtml(item.title)}</button></li>`)
+      .join('')
+    screenful.innerHTML = `<div class="globe" data-globe>
+        <p class="globe__summary">${escapeHtml(globeSummary(site))}</p>
+        <ul class="globe__stories" aria-label="The stories">${stories}</ul>
+        <p class="globe__caption" aria-hidden="true">${escapeHtml(GLOBE_HINT)}</p>
+      </div>
+      <div class="reader__bar"><button type="button" class="reader__back" data-close>← back</button><span class="reader__name">globe</span><span class="reader__keys">drag to turn · scroll to zoom · tab through the stories · q quits</span></div>`
+    const spinning: { globe: Globe | null } = { globe: null }
+    cover(screenful, () => spinning.globe?.dispose())
+    screenful.focus({ preventScroll: true })
+    void globeModule().then((module) => {
+      if (!module || !screenful.isConnected) return
+      spinning.globe = module.mountGlobe(screenful.querySelector<HTMLElement>('.globe')!, { site, mode: 'full', open: (item) => execute(`open ${storyPath(item)}`) })
+    })
+  }
+  mounted = { output, columns: () => Math.max(20, Math.floor(output.clientWidth / charWidth(output))), read, matrix, globe }
   signal.addEventListener('abort', () => {
     if (mounted?.output === output) mounted = null
     rain?.stop()
-    stopOverlay()
+    map?.globe?.dispose()
+    for (const { stop } of overlays) stop()
+    releaseOldPage(section, output)
   })
 
   // Up/Down walk the history; what was being typed comes back at the end.
@@ -207,15 +285,19 @@ export function mountTerminal(section: HTMLElement, signal: AbortSignal, site: S
     draft = ''
     updatePrompt()
     rainOn()
-    // A story opened in the reader (or cmatrix): leave the screen where it was, to come back to.
-    if (!overlay) reveal(first)
+    mapOn()
+    // A story opened in the reader (or cmatrix, or the globe): leave the screen where it was, to come back to.
+    if (!covered()) reveal(first)
   }
 
   if (welcome) print(shell.welcome())
   updatePrompt()
   rainOn()
-  if (welcome) screen.scrollTop = 0
-  else scrollDown()
+  mapOn()
+  // The terminal opens like one: the prompt at the bottom of the screen, the dashboard above it
+  // (on a phone, where you tap more than type, it starts from the top instead).
+  if (welcome && !fine) screen.scrollTop = 0
+  else promptAtBottom()
 
   form.addEventListener(
     'submit',
@@ -281,7 +363,7 @@ export function mountTerminal(section: HTMLElement, signal: AbortSignal, site: S
         focusPrompt()
         return
       }
-      if (!overlay && fine) focusPrompt()
+      if (!covered() && fine) focusPrompt()
     },
     { signal },
   )
@@ -301,7 +383,7 @@ export function mountTerminal(section: HTMLElement, signal: AbortSignal, site: S
    * moves to a new one.
    */
   const interrupt = () => {
-    if (overlay) return closeOverlay()
+    if (covered()) return closeOverlay()
     print([shell.echo(input.value, [seg('^C', 'dim')])])
     input.value = ''
     index = shell.history().length
@@ -324,7 +406,7 @@ export function mountTerminal(section: HTMLElement, signal: AbortSignal, site: S
         }
         return
       }
-      if (overlay) {
+      if (covered()) {
         if (event.key === 'q' || event.key === 'Escape') {
           event.preventDefault()
           closeOverlay()
@@ -339,6 +421,27 @@ export function mountTerminal(section: HTMLElement, signal: AbortSignal, site: S
   )
   // On a phone, focusing would pop the keyboard up over the dashboard; wait for a tap.
   if (fine) focusPrompt()
+}
+
+/**
+ * The scrollback outlives the page, but it mustn't keep the page: while it
+ * sits in the old page's screen, the whole old page stays in memory with it.
+ * Once the router has taken the old page away (after its fade), the
+ * scrollback leaves it too, unless it has already moved into a new terminal.
+ */
+function releaseOldPage(section: HTMLElement, output: HTMLElement) {
+  let tries = 0
+  const release = () => {
+    if (section.isConnected) {
+      if (++tries < 20) setTimeout(release, 250)
+      return
+    }
+    if (output.isConnected) return
+    output.remove()
+    // The newest rain starts again on its canvas when the terminal comes back; until then it needs no bitmap.
+    for (const canvas of output.querySelectorAll<HTMLCanvasElement>('.t-rain canvas')) canvas.width = canvas.height = 0
+  }
+  setTimeout(release, 250)
 }
 
 function newOutput() {
@@ -359,3 +462,11 @@ function charWidth(output: HTMLElement) {
   probe.remove()
   return width || 8.4
 }
+
+/** The globe's code comes in its own chunk, and needs pretext (and the monospace) for its labels. */
+async function globeModule() {
+  if (!(await fontsReady('mono'))) return null
+  return import('../globe')
+}
+
+const escapeHtml = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!)

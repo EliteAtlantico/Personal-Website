@@ -61,8 +61,10 @@ export function startRouter(edition: Site, first: HTMLElement) {
     if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
     const link = (event.target as Element | null)?.closest?.('a')
     if (!link || link.target || link.hasAttribute('download')) return
-    // Switching views is a choice worth remembering: next time, the site opens there.
-    if (link.dataset.view) void choose({ view: link.dataset.view as View })
+    // Switching between the paper and the terminal is a choice worth remembering: next time,
+    // the site opens there. (The globe never opens by itself; it's always a choice of the moment.)
+    const view = link.dataset.view
+    if (view === 'paper' || view === 'terminal') void choose({ view: view as View })
     const url = new URL(link.href, location.href)
     if (url.origin !== location.origin || url.hash || !isRoute(site, url.pathname)) return
     event.preventDefault()
@@ -130,11 +132,16 @@ export function startRouter(edition: Site, first: HTMLElement) {
     const target = source ? captureMorph(storyIn(page, slug!)) : null
     const fadeOut = old.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 160, easing: 'ease-out', fill: 'forwards' })
     page.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 220, delay: 40, easing: 'ease-out', fill: 'backwards' })
-    running = source && target ? morph(source, target) : null
-    const settled = Promise.all([fadeOut.finished.catch(() => undefined), running?.done])
+    // This transition's own morph: by the time it's over, another click may have started the next one.
+    const flight = source && target ? morph(source, target) : null
+    running = flight
+    const settled = Promise.all([fadeOut.finished.catch(() => undefined), flight?.done])
     await Promise.race([settled, new Promise((resolve) => setTimeout(resolve, 900))])
-    running?.finish()
+    flight?.finish()
     old.remove()
+    // Let the old page go: nothing may keep pointing at it once it's gone (a finished morph holds its headline).
+    fadeOut.cancel()
+    if (running === flight) running = null
   }
 }
 

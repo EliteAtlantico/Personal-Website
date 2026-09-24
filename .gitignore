@@ -10,3 +10,4 @@ resume/private.tex
 resume/khalil_chaghouri_resume.original.tex
 
 # content/private/ has its own .gitignore that ignores everything inside it.
+build/

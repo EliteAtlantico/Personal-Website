@@ -16,10 +16,15 @@ import { layoutNextLine, type LayoutCursor, type PreparedTextWithSegments } from
 import { canvasFont, FAMILY, fontsReady, type FontSpec } from '../layout/fonts'
 import { circleObstacle, type Interval } from '../layout/geometry'
 import { prep } from '../layout/text'
+import { keepAsPicture } from '../ui/picture'
 
 export interface Rain {
-  /** Stops it for good, leaving the last frame (without the cursor's dent) on screen. */
-  stop(): void
+  /**
+   * Stops it for good, leaving the last frame (without the cursor's dent) on
+   * screen: with `picture`, as a picture, which holds far less memory than the
+   * canvas (for rain that stays in the scrollback).
+   */
+  stop(picture?: boolean): void
   /** Holds it still while something covers it, like the reader. */
   pause(paused: boolean): void
 }
@@ -46,6 +51,15 @@ const PACE = {
   full: { gap: [300, 3200], speed: [8, 20], fade: [1000, 2400] },
 } as const
 
+/** Stamps of every character in one colour (see `sheet` in run). */
+interface Sheet {
+  canvas: HTMLCanvasElement
+  /** A stamp's size, and the room around its character, in device pixels. */
+  w: number
+  h: number
+  inset: number
+}
+
 interface Drop {
   col: number
   /** The head, in rows. It moves smoothly and writes a character each time it enters a row. */
@@ -70,16 +84,16 @@ export function startRain(host: HTMLElement, text: string, { full = false, still
   let paused = false
   void (async () => {
     // Without pretext there's no rain (see fontsReady).
-    if (!(await fontsReady())) return
+    if (!(await fontsReady('mono'))) return
     await document.fonts.load(canvasFont(FONT), 'A0')
     if (stopped) return
     rain = run(host, text, full ? PACE.full : PACE.pane, still)
     rain.pause(paused)
   })()
   return {
-    stop() {
+    stop(picture) {
       stopped = true
-      rain?.stop()
+      rain?.stop(picture)
     },
     pause(on) {
       paused = on
@@ -214,20 +228,64 @@ function run(host: HTMLElement, text: string, pace: (typeof PACE)[keyof typeof P
     return moved
   }
 
+  /**
+   * Stamps: every character the rain can show (it's all ASCII), drawn once in
+   * one colour at the screen's resolution. fillText lays its text out on every
+   * call, and the rain draws thousands of characters a frame; copying a
+   * stamp's pixels to whole device pixels is much cheaper, and looks the same.
+   * The heads' glow is part of their stamps, instead of a blur on every frame.
+   */
+  let dpr = 1
+  let sheets = new Map<string, Sheet>()
+  const sheet = (color: string, glow = false): Sheet => {
+    const key = `${color}${glow ? ' glow' : ''}`
+    const known = sheets.get(key)
+    if (known) return known
+    const inset = Math.ceil((glow ? 10 : 2) * dpr)
+    const w = Math.ceil(cw * dpr) + inset * 2
+    const h = Math.ceil(ROW * dpr) + inset * 2
+    const stamps = document.createElement('canvas')
+    stamps.width = w * 16
+    stamps.height = h * 6
+    const sctx = stamps.getContext('2d')!
+    sctx.font = canvasFont({ ...FONT, size: FONT.size * dpr })
+    sctx.textBaseline = 'middle'
+    sctx.fillStyle = color
+    if (glow) {
+      sctx.shadowColor = ink.glow
+      sctx.shadowBlur = 6 * dpr
+    }
+    // Characters 32 to 126, sixteen to a row; each sits where fillText would put it in its cell.
+    for (let code = 32; code < 127; code++) {
+      const i = code - 32
+      sctx.fillText(String.fromCharCode(code), (i % 16) * w + inset, Math.floor(i / 16) * h + inset + (ROW / 2 + 0.5) * dpr)
+    }
+    const made = { canvas: stamps, w, h, inset }
+    sheets.set(key, made)
+    return made
+  }
+  /** A character in the cell whose top left is (x, y), in CSS pixels. */
+  const stamp = (from: Sheet, ch: string, x: number, y: number) => {
+    const i = ch.charCodeAt(0) - 32
+    if (i < 0 || i > 94) return
+    const { w, h, inset } = from
+    ctx.drawImage(from.canvas, (i % 16) * w, Math.floor(i / 16) * h, w, h, (Math.round(x * dpr) - inset) / dpr, (Math.round(y * dpr) - inset) / dpr, w / dpr, h / dpr)
+  }
+
   // The brightest characters (each drop's head, and whatever the cursor has pushed) are drawn last, glowing.
   const lit: Array<{ ch: string; x: number; y: number; alpha: number; moved: boolean }> = []
 
   const draw = (now: number) => {
     ctx.clearRect(0, 0, width, height)
-    ctx.font = canvasFont(FONT)
-    ctx.textBaseline = 'middle'
+    const glowing = sheet(ink.glow)
+    const falling = sheet(ink.rain)
     const tick = Math.floor(now / GLITCH_MS)
     const flicker = Math.floor(now / 120)
     const obstacle = aim ? circleObstacle(aim.x, aim.y, aim.r) : null
     lit.length = 0
     for (let r = 0; r < rows; r++) {
       const top = r * ROW
-      const y = top + ROW / 2 + 0.5
+      const y = top
       const cut = obstacle?.band(top, top + ROW)
       const bent = !!cut && place(r, cut, aim!.x, now)
       // Now and then a bent row tears a cell to one side.
@@ -250,27 +308,23 @@ function run(host: HTMLElement, text: string, pace: (typeof PACE)[keyof typeof P
         }
         // Bright green just behind the head, then fading slowly through the leaf green.
         ctx.globalAlpha = fade ** 0.7
-        ctx.fillStyle = age < GLOW_MS ? ink.glow : ink.rain
-        ctx.fillText(ch, x, y)
+        stamp(age < GLOW_MS ? glowing : falling, ch, x, y)
       }
     }
     // What the cursor pushed splits into the oranges, like a signal that's slipping.
+    const flame = sheet(ink.flame)
+    const amber = sheet(ink.amber)
     for (const { ch, x, y, alpha, moved } of lit) {
       if (!moved) continue
       ctx.globalAlpha = 0.75 * alpha
-      ctx.fillStyle = ink.flame
-      ctx.fillText(ch, x - 1.5, y)
-      ctx.fillStyle = ink.amber
-      ctx.fillText(ch, x + 1.5, y)
+      stamp(flame, ch, x - 1.5, y)
+      stamp(amber, ch, x + 1.5, y)
     }
-    ctx.shadowColor = ink.glow
-    ctx.shadowBlur = 6 * (devicePixelRatio || 1)
-    ctx.fillStyle = ink.head
+    const heads = sheet(ink.head, true)
     for (const { ch, x, y, alpha } of lit) {
       ctx.globalAlpha = alpha
-      ctx.fillText(ch, x, y)
+      stamp(heads, ch, x, y)
     }
-    ctx.shadowBlur = 0
     ctx.globalAlpha = 1
   }
 
@@ -278,7 +332,9 @@ function run(host: HTMLElement, text: string, pace: (typeof PACE)[keyof typeof P
   const resize = () => {
     width = host.clientWidth
     height = host.clientHeight
-    const dpr = devicePixelRatio || 1
+    dpr = devicePixelRatio || 1
+    for (const { canvas: stamps } of sheets.values()) stamps.width = stamps.height = 0
+    sheets = new Map()
     canvas.width = Math.round(width * dpr)
     canvas.height = Math.round(height * dpr)
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
@@ -363,7 +419,7 @@ function run(host: HTMLElement, text: string, pace: (typeof PACE)[keyof typeof P
   }
 
   return {
-    stop() {
+    stop(picture = false) {
       controller.abort()
       resizes.disconnect()
       sight.disconnect()
@@ -373,6 +429,7 @@ function run(host: HTMLElement, text: string, pace: (typeof PACE)[keyof typeof P
         aim = null
         draw(clock)
       }
+      if (picture && cols) keepAsPicture(canvas, 't-rain__picture')
     },
     pause(on) {
       paused = on

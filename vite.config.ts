@@ -1,8 +1,13 @@
 import { createReadStream, existsSync, statSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
+import { createRequire } from 'node:module'
 import path from 'node:path'
+import { feature } from 'topojson-client'
+import type { GeometryCollection, Topology } from 'topojson-specification'
 import { defineConfig, type Plugin } from 'vite'
 import { CONTENT_DIR, MEDIA_DIR, loadSite } from './src/content/load'
+import { deskNow } from './server/site'
+import { DOTS, landBits, type Polygons } from './src/globe/land'
 
 const MIME: Record<string, string> = {
   '.jpg': 'image/jpeg',
@@ -49,11 +54,16 @@ function content(): Plugin {
         server.ws.send({ type: 'full-reload' })
       })
 
-      // What Cloudflare sees of a visitor (city, network) comes from the edge worker in production
-      // (stage 6). Here there's nothing to see; ?debug&city=…&org=… stands in for it.
+      // What Cloudflare sees of a visitor (city, network) comes from the edge Worker in production
+      // (edge/worker.ts). Here there's nothing to see; ?debug&city=…&org=… stands in for it.
       server.middlewares.use('/api/visitor', (_req, res) => {
         res.setHeader('Content-Type', 'application/json')
         res.end('{}')
+      })
+      // How the desk is doing (server/site.ts), from this computer while developing.
+      server.middlewares.use('/api/desk', async (_req, res) => {
+        res.setHeader('Content-Type', 'application/json')
+        res.end(JSON.stringify(await deskNow()))
       })
 
       // Photos and videos straight from content/media/ (the build makes resized copies instead).
@@ -89,7 +99,59 @@ function content(): Plugin {
   }
 }
 
+/**
+ * The globe's land as `import land from 'virtual:land'`: one bit per dot
+ * (src/globe/land.ts), worked out from Natural Earth's coastlines once per
+ * build instead of in every visitor's browser.
+ */
+function land(): Plugin {
+  const ID = 'virtual:land'
+  let bits: string | undefined
+  return {
+    name: 'chaghouri-land',
+    resolveId: (id) => (id === ID ? `\0${ID}` : undefined),
+    async load(id) {
+      if (id !== `\0${ID}`) return undefined
+      if (!bits) {
+        const file = createRequire(import.meta.url).resolve('world-atlas/land-110m.json')
+        const topology = JSON.parse(await readFile(file, 'utf8')) as Topology<{ land: GeometryCollection }>
+        const polygons: Polygons = feature(topology, topology.objects.land).features.flatMap(({ geometry }) =>
+          geometry.type === 'MultiPolygon' ? geometry.coordinates : geometry.type === 'Polygon' ? [geometry.coordinates] : [],
+        )
+        bits = landBits(polygons, DOTS)
+      }
+      return `export default ${JSON.stringify(bits)}`
+    },
+  }
+}
+
+/**
+ * pretext works out the direction of right-to-left text (bidi levels) in
+ * everything it prepares, as extra information for renderers that draw
+ * mixed-direction text themselves. It never uses them itself, and neither
+ * does this site (it's left-to-right English throughout), so its Unicode
+ * tables and that work, done for every string on every page, are left out:
+ * pretext's bidi module is swapped for one with nothing to report, which it
+ * already allows for.
+ */
+function noBidi(): Plugin {
+  const ID = '\0pretext-no-bidi'
+  return {
+    name: 'chaghouri-no-bidi',
+    enforce: 'pre',
+    resolveId: (source, importer) => (source === './bidi.js' && importer?.includes('@chenglou/pretext') ? ID : undefined),
+    load: (id) => (id === ID ? 'export function computeSegmentLevels() { return null }' : undefined),
+  }
+}
+
 export default defineConfig({
-  plugins: [content()],
-  build: { target: 'es2022' },
+  plugins: [content(), land(), noBidi()],
+  build: {
+    target: 'es2022',
+    // Source maps only for profiling (perf/frames.ts), and never linked from the code.
+    sourcemap: process.env.PERF_SOURCEMAP ? 'hidden' : false,
+    // Every browser the site supports preloads modules itself, and the lazy chunks (the terminal,
+    // the globe) have nothing of their own to preload, so neither the polyfill nor the helper ships.
+    modulePreload: false,
+  },
 })

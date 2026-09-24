@@ -1,0 +1,9 @@
+# The tunnel's settings. Copy to ~/.cloudflared/config.yml on the desk, with
+# the tunnel's ID (printed by `cloudflared tunnel create chaghouri`) and your
+# domain filled in.
+tunnel: TUNNEL_ID
+credentials-file: /home/kc/.cloudflared/TUNNEL_ID.json
+ingress:
+  - hostname: desk.example.com
+    service: http://127.0.0.1:8787
+  - service: http_status:404

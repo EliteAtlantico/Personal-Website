@@ -1,0 +1,25 @@
+// The front door (edge/worker.ts), and the copy of the site it keeps for when
+// the desk is asleep. `bun run deploy` builds everything and runs `wrangler
+// deploy`; deploy/README.md has the one-time setup.
+{
+  "name": "chaghouri",
+  "main": "edge/worker.ts",
+  "compatibility_date": "2026-09-01",
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    // The Worker sees every request first, so it can ask the desk before falling back to the copy.
+    "run_worker_first": true,
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "404-page"
+  },
+  "vars": {
+    // The desk's own address, through the tunnel (e.g. "https://desk.example.com").
+    // Empty until the tunnel exists: the Worker then always serves the copy.
+    "ORIGIN": ""
+  }
+  // Once there's a domain, the site's addresses (the Worker sends www. to the
+  // bare one), and no more workers.dev copy of it:
+  // "routes": [{ "pattern": "example.com", "custom_domain": true }, { "pattern": "www.example.com", "custom_domain": true }],
+  // "workers_dev": false
+}

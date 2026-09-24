@@ -1,12 +1,14 @@
 // Reads content/ from disk. Runs at build time only (Vite plugin + prerender
 // script), never in the browser, so Markdown is rendered once, up front.
 import { existsSync } from 'node:fs'
-import { readdir, readFile } from 'node:fs/promises'
+import { readdir, readFile, stat } from 'node:fs/promises'
 import path from 'node:path'
 import hyphen from 'hyphen/en-us/index.js'
 import { imageSize } from 'image-size'
 import { Marked, type Token } from 'marked'
+import sharp from 'sharp'
 import { parse as parseYaml } from 'yaml'
+import { findSkyline } from '../layout/skyline'
 import {
   SECTIONS,
   type Audience,
@@ -44,6 +46,7 @@ export async function loadSite({ includeDrafts, optimizeMedia = false }: LoadOpt
   )
   // Only the lead story's opening is set on the front page; don't ship the rest to the browser.
   for (const item of items) if (item.slug !== config.lead) item.lede = []
+  if (config.banner?.mode === 'silhouette') config.banner.skyline = await skylineOf(path.join(MEDIA_DIR, 'site', config.banner.src), config.banner.band ?? [0, 1])
   const site: Site = {
     config,
     items: items.filter((item) => includeDrafts || !item.draft),
@@ -53,6 +56,32 @@ export async function loadSite({ includeDrafts, optimizeMedia = false }: LoadOpt
   }
   if (!includeDrafts) assertPublishable(site)
   return site
+}
+
+/** Worked out once per photo (the dev server loads the site for every page it serves). */
+const skylines = new Map<string, { changed: number; skyline: string }>()
+
+/**
+ * The banner's rooftops (layout/portrait.ts's silhouette mode), found here, in
+ * the photo scaled to the width the browser used to sample it at, so no
+ * visitor has to download and scan the photo: `<width>x<height>:` then each
+ * column's rooftop row as the change from the column before (small numbers,
+ * which compress to almost nothing).
+ */
+async function skylineOf(file: string, band: [number, number]): Promise<string | undefined> {
+  if (!existsSync(file)) return undefined
+  const changed = (await stat(file)).mtimeMs
+  const known = skylines.get(file)
+  if (known?.changed === changed) return known.skyline
+  const { data, info } = await sharp(file).rotate().resize({ width: 1200, withoutEnlargement: true }).removeAlpha().raw().toBuffer({ resolveWithObject: true })
+  const { width, height, channels } = info
+  const rows = findSkyline((x, y) => {
+    const i = (Math.min(height - 1, Math.max(0, y)) * width + Math.min(width - 1, Math.max(0, x))) * channels
+    return [data[i]!, data[i + 1]!, data[i + 2]!]
+  }, width, height, band)
+  const skyline = `${width}x${height}:${[...rows].map((row, x) => (x ? row - rows[x - 1]! : row)).join(',')}`
+  skylines.set(file, { changed, skyline })
+  return skyline
 }
 
 /** Production builds refuse to ship a leftover TODO. Finish the item or mark it `draft: true`. */

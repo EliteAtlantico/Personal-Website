@@ -32,8 +32,10 @@ async function start() {
     root.classList.remove('pt-pending', 'pt-view')
     return
   }
-  // The fonts load while the visitor's edition is worked out.
-  void fontsReady()
+  // The fonts load while the visitor's edition is worked out: the terminal's monospace if that's
+  // where this is going (the terminal itself, or a front page that may switch to it), else the paper's.
+  const terminal = page.classList.contains('page--terminal') || root.classList.contains('pt-view')
+  void fontsReady(terminal ? 'mono' : 'paper')
   const edition = await personalize(site)
   if (normalizePath(location.pathname) === '/') {
     if (edition.decision.view === 'terminal') {

@@ -1,0 +1,14 @@
+# The tunnel: a connection from the desk out to Cloudflare, which is how
+# visitors reach kc-site.service without any port being opened here.
+# Needs ~/.cloudflared/config.yml (see deploy/cloudflared.yml).
+[Unit]
+Description=chaghouri: the Cloudflare tunnel to the website
+After=network-online.target kc-site.service
+
+[Service]
+ExecStart=/usr/bin/cloudflared --no-autoupdate tunnel --config %h/.cloudflared/config.yml run
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

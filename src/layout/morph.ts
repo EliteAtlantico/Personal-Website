@@ -377,6 +377,8 @@ export function morph(from: MorphSnap, to: MorphSnap): Morph {
     finished = true
     overlay.remove()
     for (const el of hidden) el.style.visibility = ''
+    // Words that are still flying stop, and every animation lets go of its word.
+    for (const animation of animations) animation.cancel()
     resolve()
   }
   Promise.all(animations.map((a) => a.finished)).then(finish, finish)
