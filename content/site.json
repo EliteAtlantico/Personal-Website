@@ -1,0 +1,136 @@
+{
+  "author": "Khalil Chaghouri",
+  "tagline": "Electrical & Computer Engineering · University of Toronto",
+  "edition": "Toronto, ON · Kuwait City",
+  "lead": "brain-freeze",
+  "secondary": [
+    "shape-from-lighting",
+    "mersivity"
+  ],
+  "rail": [
+    "now",
+    "kuwait-toronto",
+    "tedx"
+  ],
+  "desks": [
+    {
+      "name": "Research",
+      "items": [
+        "mersivity",
+        "piano-coach",
+        "quantum-act",
+        "scam-detection"
+      ]
+    },
+    {
+      "name": "Industry",
+      "items": [
+        "amantec",
+        "idrak",
+        "jenayen"
+      ]
+    },
+    {
+      "name": "Projects",
+      "items": [
+        "shape-from-lighting",
+        "qsite",
+        "butler-bot",
+        "swarm-robots",
+        "todosive"
+      ]
+    },
+    {
+      "name": "Campus",
+      "items": [
+        "uoft",
+        "rsx",
+        "kuwait-years"
+      ]
+    },
+    {
+      "name": "Off Hours",
+      "variant": "briefs",
+      "items": [
+        "hobby-tech-head",
+        "hobby-basketball",
+        "hobby-tennis",
+        "hobby-guitar"
+      ]
+    }
+  ],
+  "sectionNames": {
+    "now": "Now",
+    "research": "Research",
+    "work": "Industry",
+    "projects": "Projects",
+    "clubs": "Campus",
+    "speaking": "Speaking",
+    "education": "Education",
+    "story": "Opinion",
+    "hobbies": "Off Hours"
+  },
+  "links": [
+    {
+      "label": "Résumé",
+      "url": "/resume.pdf"
+    },
+    {
+      "label": "GitHub",
+      "url": "https://github.com/EliteAtlantico"
+    },
+    {
+      "label": "LinkedIn",
+      "url": "https://www.linkedin.com/in/khalilc"
+    },
+    {
+      "label": "Email",
+      "url": "mailto:khalil.chaghouri@mail.utoronto.ca"
+    }
+  ],
+  "banner": {
+    "src": "toronto-skyline.jpg",
+    "alt": "The Toronto skyline on a clear day, the CN Tower rising above the downtown towers, with Lake Ontario in front",
+    "band": [0.355, 0.893],
+    "mode": "silhouette",
+    "landmark": {
+      "label": "CN Tower",
+      "outline": [
+        [0.54375, 0.36113],
+        [0.5435, 0.36151],
+        [0.541, 0.45736],
+        [0.539, 0.46038],
+        [0.5405, 0.52],
+        [0.5385, 0.52604],
+        [0.539, 0.53509],
+        [0.5335, 0.53962],
+        [0.533, 0.54566],
+        [0.5295, 0.55019],
+        [0.5305, 0.57057],
+        [0.533, 0.57434],
+        [0.5385, 0.57585],
+        [0.5395, 0.58264],
+        [0.5314, 0.89283],
+        [0.55981, 0.89283],
+        [0.5575, 0.78792],
+        [0.556, 0.78264],
+        [0.5515, 0.65962],
+        [0.55, 0.5766],
+        [0.558, 0.57208],
+        [0.557, 0.56377],
+        [0.559, 0.56075],
+        [0.56, 0.54943],
+        [0.556, 0.54642],
+        [0.555, 0.53811],
+        [0.5495, 0.53585],
+        [0.55, 0.52453],
+        [0.548, 0.52302],
+        [0.548, 0.46792],
+        [0.5495, 0.4634],
+        [0.5465, 0.45283],
+        [0.547, 0.42264],
+        [0.544, 0.36151]
+      ]
+    }
+  }
+}

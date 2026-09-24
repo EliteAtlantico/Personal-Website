@@ -1,0 +1,28 @@
+{
+  "name": "chaghouri-times",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build && bun scripts/prerender.ts",
+    "preview": "vite preview",
+    "check": "tsc --noEmit",
+    "resume": "cd resume && tectonic -X compile khalil_chaghouri_resume.tex && tectonic -X compile khalil_chaghouri_resume_public.tex && cp khalil_chaghouri_resume_public.pdf ../public/resume.pdf"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.2",
+    "hyphen": "^1.14.1",
+    "image-size": "^2.0.4",
+    "sharp": "^0.35.4",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.0"
+  },
+  "dependencies": {
+    "@chenglou/pretext": "^0.0.9",
+    "@fontsource-variable/fraunces": "^5.3.0",
+    "@fontsource-variable/newsreader": "^5.3.0",
+    "@fontsource/ibm-plex-mono": "^5.3.0",
+    "marked": "^18.0.14",
+    "yaml": "^2.9.1"
+  }
+}

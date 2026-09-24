@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.DS_Store
+
+# Anything with the phone number in it stays off git.
+# The website ships public/resume.pdf, which is built without it.
+KC_Resume.pdf
+resume/*.pdf
+resume/private.tex
+resume/khalil_chaghouri_resume.original.tex
+
+# content/private/ has its own .gitignore that ignores everything inside it.

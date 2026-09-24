@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light dark">
+    <!--app-head-->
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+    <!-- "js": the banner photo is only ever shown as type, so hide it from the first paint.
+         "pt-pending": hide the page for the moment it takes pretext to lay it out (never longer than 2s, and never without JS). -->
+    <script>document.documentElement.classList.add('js','pt-pending');setTimeout(function(){document.documentElement.classList.remove('pt-pending')},2000)</script>
+    <script type="module" src="/src/main.ts"></script>
+  </head>
+  <body>
+    <div id="app"><!--app-html--></div>
+  </body>
+</html>

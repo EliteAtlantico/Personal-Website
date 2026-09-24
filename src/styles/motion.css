@@ -1,0 +1,63 @@
+/* Page changes: the old page fades out on top while the new one fades in
+   (the router drives this with the Web Animations API), and the words of the
+   story being opened or closed fly between the two layouts in this overlay. */
+
+.page {
+  background: var(--paper);
+}
+
+.morph {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  pointer-events: none;
+}
+
+/* Positioned (and scaled from their top-left corner) by transforms only. */
+.morph__word,
+.morph__kicker {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+  will-change: transform;
+}
+
+.morph__word {
+  white-space: pre;
+}
+
+.morph__kicker {
+  width: max-content;
+}
+
+/* Masonry tiles glide to their new spots when the window is resized. */
+.desk__grid.is-settled > .tile {
+  transition: transform 320ms cubic-bezier(0.2, 0.75, 0.15, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .desk__grid.is-settled > .tile {
+    transition: none;
+  }
+}
+
+/* Swarm assembly: the real headline keeps its space (transparent) while its letters dock. */
+.tile__headline.is-assembling {
+  position: relative;
+  color: transparent;
+}
+
+.swarm {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.swarm > span {
+  position: absolute;
+  top: 0;
+  left: 0;
+  white-space: pre;
+  will-change: transform, opacity;
+}

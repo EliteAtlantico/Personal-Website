@@ -1,0 +1,126 @@
+.masthead {
+  max-width: var(--page);
+  margin: 0 auto;
+  padding: 12px var(--gutter) 0;
+}
+
+.masthead__strip {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 6px 20px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--rule);
+  color: var(--ink-2);
+  font: 500 11px/1.4 var(--font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.masthead__links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+}
+
+.masthead__links a {
+  text-decoration: none;
+}
+
+.masthead__links a:hover {
+  color: var(--accent);
+}
+
+/* Front page: the banner picture (optional), then the name line, which is the page's <h1>. */
+.masthead__banner {
+  /* Half the height of the old masthead title (clamp(2.4rem, 9vw, 6.75rem) at 0.95 line-height, plus 32px padding). */
+  height: max(40px, calc((clamp(2.4rem, 9vw, 6.75rem) * 0.95 + 32px) / 2));
+  /* A fixed-height strip: always full width, whatever the photo's own proportions (the photo is cropped to fit). */
+  width: 100%;
+  aspect-ratio: auto !important;
+  margin: 14px 0 0;
+  overflow: hidden;
+  background: var(--paper-2);
+}
+
+.masthead__banner img,
+.masthead__banner video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* Show the configured slice of the photo (see site.json banner.band). */
+  object-position: 50% var(--banner-y, 50%);
+}
+
+/* Without a banner the name line sits directly under the strip. */
+.masthead--full .masthead__strip {
+  border-bottom: 0;
+}
+
+.masthead__banner + .masthead__tagline {
+  margin-top: 14px;
+}
+
+.masthead__tagline {
+  margin: 0;
+  padding: 10px 0;
+  border-top: 3px double var(--rule-strong);
+  border-bottom: 1px solid var(--rule-strong);
+  font: 500 12px/1.4 var(--font-mono);
+  letter-spacing: 0.12em;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.masthead__name {
+  font-weight: 500;
+  color: var(--accent);
+}
+
+/* Articles: the name, small, linking home. */
+.masthead__title {
+  margin: 0;
+  padding: 12px 0 12px;
+  border-bottom: 3px double var(--rule-strong);
+  font: 700 clamp(1.4rem, 3vw, 1.9rem)/1.1 var(--font-display);
+  letter-spacing: -0.01em;
+  text-align: center;
+}
+
+.masthead__title a {
+  text-decoration: none;
+}
+
+@media (max-width: 560px) {
+  .masthead__edition {
+    display: none;
+  }
+}
+
+/* The typographic portrait: the photo stays in the page (for its alt text and
+   no-JS visitors) while a canvas redraws it out of words. With JavaScript the
+   photo is hidden from the very first paint, so it never flashes up before the
+   canvas; it only comes back (.is-photo) if the canvas can't be drawn. */
+.masthead__banner {
+  position: relative;
+  color: var(--ink);
+}
+
+.js .masthead__banner:not(.is-photo) {
+  background: none;
+}
+
+.js .masthead__banner:not(.is-photo) img {
+  opacity: 0;
+}
+
+/* Exactly covers the strip; nothing is drawn outside it. */
+.masthead__portrait {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}

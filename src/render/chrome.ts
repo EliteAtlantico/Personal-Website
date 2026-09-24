@@ -1,0 +1,59 @@
+// The masthead and footer that frame every page.
+import type { Site } from '../content/types'
+import { esc, formatDate } from './html'
+import { coverFigure } from './tiles'
+
+export function masthead(site: Site, variant: 'full' | 'compact') {
+  const { config } = site
+  const links = config.links
+    .map((link) => `<a href="${esc(link.url)}"${link.url.startsWith('http') ? ' rel="noopener"' : ''}>${esc(link.label)}</a>`)
+    .join('')
+  const strip = `<div class="masthead__strip">
+    <span class="masthead__date" data-today>${esc(formatDate(site.builtAt))}</span>
+    <span class="masthead__edition">${esc(config.edition)}</span>
+    <nav class="masthead__links" aria-label="Elsewhere">${links}</nav>
+  </div>`
+
+  if (variant === 'compact') {
+    return `<a class="skip" href="#main">Skip to content</a>
+<header class="masthead masthead--compact">
+  ${strip}
+  <p class="masthead__title"><a href="/">${esc(config.author)}</a></p>
+</header>`
+  }
+  // On the front page the name line is the page's <h1>; the banner (when there is one) sits above it.
+  return `<a class="skip" href="#main">Skip to content</a>
+<header class="masthead masthead--full">
+  ${strip}
+  ${banner(site)}
+  <h1 class="masthead__tagline"><span class="masthead__name">${esc(config.author)}</span> <span aria-hidden="true">·</span> ${esc(config.tagline)}</h1>
+</header>`
+}
+
+/**
+ * The banner strip. Its settings travel as data attributes for the typographic
+ * portrait (layout/portrait.ts); without JavaScript the photo is simply cropped
+ * to the same slice.
+ */
+function banner(site: Site) {
+  const settings = site.config.banner
+  if (!site.banner || !settings) return ''
+  const [top, bottom] = settings.band ?? [0, 1]
+  const attrs = [
+    ` data-band="${top},${bottom}" data-mode="${settings.mode ?? 'tone'}"`,
+    settings.landmark
+      ? ` data-landmark="${esc(JSON.stringify(settings.landmark.outline))}" data-landmark-label="${esc(settings.landmark.label)}"`
+      : '',
+  ].join('')
+  return coverFigure(site.banner, 'masthead__banner', 3, '(max-width: 1280px) 100vw, 1280px')
+    .replace('loading="lazy"', 'loading="eager" fetchpriority="high"')
+    .replace('<figure class="masthead__banner" style="', `<figure class="masthead__banner"${attrs} style="--banner-y: ${(((top + bottom) / 2) * 100).toFixed(1)}%; `)
+}
+
+export function footer(site: Site) {
+  const year = new Date(site.builtAt).getFullYear()
+  return `<footer class="colophon">
+  <p>© ${year} ${esc(site.config.author)}. Set in Fraunces, Newsreader and IBM Plex Mono.</p>
+  <p>No cookies, no trackers. <a href="/resume.pdf">Résumé (PDF)</a></p>
+</footer>`
+}

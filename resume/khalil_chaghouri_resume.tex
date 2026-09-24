@@ -1,0 +1,189 @@
+%==============================================================
+%  Khalil Chaghouri: Resume (one page)
+%  Compiles on Overleaf (pdfLaTeX) and locally with `tectonic` (XeTeX).
+%  Single-column, ATS-friendly. No exotic packages required.
+%==============================================================
+\documentclass[letterpaper,10pt]{article}
+
+% ---------- Packages ----------
+\usepackage{iftex}
+\ifPDFTeX
+  \usepackage[T1]{fontenc}
+  \usepackage[utf8]{inputenc}
+\else
+  \usepackage{fontspec}
+\fi
+\usepackage[margin=0.5in]{geometry}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{array}
+\usepackage{tabularx}
+
+% ---------- Colors ----------
+\definecolor{accent}{HTML}{2C3E50}
+
+% ---------- Hyperlink setup ----------
+\hypersetup{
+    colorlinks=true,
+    urlcolor=accent,
+    linkcolor=accent,
+    pdftitle={Khalil Chaghouri - Resume},
+    pdfauthor={Khalil Chaghouri}
+}
+
+% ---------- Spacing / formatting ----------
+\setlength{\parindent}{0pt}
+\pagestyle{empty}
+
+% Section headings: small caps, accent color, rule underneath
+\titleformat{\section}
+  {\large\bfseries\color{accent}\scshape}
+  {}{0em}{}[\vspace{1pt}\titlerule]
+\titlespacing{\section}{0pt}{4pt}{2pt}
+
+% ---------- Column types ----------
+% Right column reserved for dates: fixed width, right-aligned, never overlaps.
+\newcolumntype{R}{>{\raggedleft\arraybackslash}p{1.3in}}
+% Bold fixed-width label column for the skills table.
+\newcolumntype{S}{>{\bfseries\raggedright\arraybackslash}p{1.25in}}
+
+% ---------- Custom commands ----------
+% Entry header. Left text WRAPS (X column) so it can never collide with the
+% dates; the date sits in the fixed right column and stays inside the margin.
+%   #1 = bold (role / school)   #2 = italic detail   #3 = dates (right)
+% The title and detail are separated by a bar, like the contact line.
+\newcommand{\entry}[3]{%
+  \begin{tabularx}{\textwidth}{@{}X R@{}}
+    \textbf{#1} \ \textbar\ \textit{#2} & #3 \\
+  \end{tabularx}\par\vspace{-1pt}%
+}
+
+% Bullet list tuned for tight spacing
+\newcommand{\bullets}[1]{%
+  \begin{itemize}[leftmargin=1.4em,topsep=0pt,itemsep=0pt,parsep=0pt]
+    #1
+  \end{itemize}%
+}
+
+% Phone number lives in private.tex (gitignored); the public build skips it.
+\ifdefined\publicversion\else\IfFileExists{private.tex}{\input{private.tex}}{}\fi
+
+%==============================================================
+\begin{document}
+
+% ---------------- Header ----------------
+\begin{center}
+  {\Huge\bfseries\color{accent} Khalil Chaghouri}\\[3pt]
+  {\large Electrical \& Computer Engineering Student \ \textbar\ University of Toronto}\\[4pt]
+  {\small Toronto, ON \ \textbar\ \ifdefined\resumephone \resumephone\ \ \textbar\ \fi
+  \href{mailto:khalil.chaghouri@mail.utoronto.ca}{khalil.chaghouri@mail.utoronto.ca} \ \textbar\
+  \href{https://www.linkedin.com/in/khalilc}{linkedin.com/in/khalilc} \ \textbar\
+  \href{https://github.com/EliteAtlantico}{github.com/EliteAtlantico}}
+\end{center}
+
+% ---------------- Summary ----------------
+\section{Summary}
+ECE undergraduate working across AI systems, EEG and brain--computer interfaces, and embedded hardware.
+Executive Officer at Mersivity (MannLab), co-author at IEEE GEM 2026, and builder of LLM-powered products
+for three companies in Kuwait. Open to Summer 2027 research and engineering roles.
+
+% ---------------- Education ----------------
+\section{Education}
+\entry{University of Toronto}{B.A.Sc., Electrical \& Computer Engineering (PEY Co-op)}{Sep 2025 -- Apr 2030}
+\entry{American School of Kuwait}{Valedictorian}{Jun 2025}
+
+% ---------------- Publications ----------------
+\section{Publications}
+\textit{Cocaine Buzzkill: An XR Game To Take Aim Against the Drug Epidemic}. IEEE GEM 2026, Berlin (third of five authors).
+
+% ---------------- Experience ----------------
+\section{Experience}
+
+\entry{Researcher, MannLab \& Executive Officer, Mersivity}{University of Toronto}{Nov 2025 -- Present}
+\bullets{
+  \item Executive Officer since Sep 2026: lead student research projects and help define new research directions for the lab.
+  \item Wrote the IEEE GEM 2026 paper (3rd of 5 authors) on an EEG-driven XR snowball game; helped debug its Unity app.
+  \item Built a webcam piano-coaching system (MediaPipe, OpenCV) end to end and ran its pilot EEG experiments.
+  \item Developing a quantum Adaptive Chirplet Transform in Qiskit: chirps encoded as phase gates, read out with one QFT.
+}
+
+\vspace{2pt}
+\entry{Lead Product Engineer, AmanTec}{Cybersecurity \& AI, Kuwait (Remote)}{Aug 2026 -- Present}
+\bullets{
+  \item One of the main engineers and product owners on an unreleased AI product; designed its database schema,
+        LangGraph agent architecture and access-control model (FastAPI, PostgreSQL). Wrote \textasciitilde440 tests; logged 45 defects pre-launch.
+}
+
+\vspace{2pt}
+\entry{Agentic Product Engineer, IDRAK Training \& Consultancy}{Kuwait (Remote)}{Aug 2026 -- Present}
+\bullets{
+  \item Built an AI trainer-matching platform where a panel of LLMs grades trainers against training opportunities and a judge
+        model ranks the best fit (FastAPI, LangGraph, Next.js); Arabic-capable CV OCR, encryption at rest, 934 tests.
+}
+
+\vspace{2pt}
+\entry{Agentic Development Consultant, Jenayen}{Salon group, Kuwait (Remote)}{Sep 2026 -- Present}
+\bullets{
+  \item Building a Django finance platform in which Claude reads English and Arabic invoices, even handwritten; 232 tests.
+}
+
+\vspace{2pt}
+\entry{Electrical Team Member, Robotics for Space Exploration (RSX)}{Toronto, ON}{Sep 2025 -- Present}
+\bullets{
+  \item Hardware verification and electrical design for the team's Battery Management System (BMS).
+}
+
+% ---------------- Projects ----------------
+\section{Projects}
+
+\entry{Shape from Lighting}{Low-contrast computer vision (solo)}{Summer 2026}
+\bullets{
+  \item Physics-informed U-Net that finds white-on-white objects from shading; 43\% lower error than classical photometric stereo.
+}
+
+\vspace{2pt}
+\entry{Butler[bot]}{Battle of the Schools hackathon, team of 4}{Sep 2026}
+\bullets{
+  \item Built the LLM tool-calling agent, initial balancing/driving in MuJoCo and Whisper voice; team hit 28/30 chores.
+}
+
+\vspace{2pt}
+\entry{Qubit Router}{Q-SITE 2026 quantum hackathon}{Sep 2026 -- Present}
+\bullets{
+  \item Built GNN + policy nets on a self-generated dataset to prune routing search; beats Qiskit SABRE (67.0 vs.\ 76.0).
+}
+
+\vspace{2pt}
+\entry{KC-Bots: Self-Assembling Swarm Robots}{Team lead, Kuwait}{Summer 2025}
+\bullets{
+  \item Custom KiCad ESP32 PCB (IMU, motor drivers, electromagnet), C++ firmware, ESP-NOW mesh, STL-to-voxel planner.
+}
+
+\vspace{2pt}
+\entry{Todosive}{Personal productivity app (solo)}{2026}
+\bullets{
+  \item Offline-first Svelte 5 + Fastify/SQLite app with an Electron client; \textasciitilde300\,MB RAM vs.\ 2\,GB for my old Notion setup.
+}
+
+\vspace{2pt}
+\entry{AI Scam Detector}{AP Research, Kuwait}{Sep 2024 -- May 2025}
+\bullets{
+  \item One-hotkey scam checker for older adults (Google Cloud Vision + ChatGPT); F1 of 89\% across emails, websites and calls.
+}
+
+% ---------------- Skills ----------------
+\section{Technical Skills}
+\begin{tabularx}{\textwidth}{@{}S X@{}}
+Languages       & Python, C, C++, TypeScript / JavaScript, Java, SQL \\
+AI / ML         & PyTorch, LangGraph, LLM APIs (Claude, Gemini, Mistral), YOLO, MediaPipe, OpenCV, Qiskit \\
+Software        & FastAPI, Django, Next.js / React, Svelte, PostgreSQL, Docker, Electron, GitHub Actions, Linux \\
+Hardware / BCI  & ESP32, KiCad, soldering, BMS verification, EEG (Muse, MNE-Python), MuJoCo, Fusion 360 \\
+\end{tabularx}
+
+% ---------------- Leadership ----------------
+\section{Leadership \& Activities}
+TEDxYouth Speaker, \href{https://www.youtube.com/watch?v=bl8RvznA6uQ}{``Paths of Learning''} (2024) \ \textbullet\ Founder, ASK Robotics Club \ \textbullet\ Ran the ``STEM for Change'' hackathon
+
+\end{document}

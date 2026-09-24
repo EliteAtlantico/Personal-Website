@@ -1,0 +1,198 @@
+/* Front page: lead story + rail on top, then full-width desks.
+   Desks use a hairline grid: every tile draws its own left and top rule, and
+   the grid is nudged 1px up/left inside an overflow:hidden wrapper so the
+   outermost rules are clipped. That keeps the lines only *between* tiles,
+   however many columns fit. */
+
+.front {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  column-gap: 40px;
+  max-width: var(--page);
+  margin: 0 auto;
+  padding: 0 var(--gutter) 48px;
+}
+
+.lead {
+  padding: 28px 0 32px;
+}
+
+/* Two stories side by side under the lead, split by a hairline. */
+.lead__secondary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  margin-top: 28px;
+  border-top: 1px solid var(--rule);
+}
+
+.lead__secondary > .tile {
+  padding: 18px 20px 0 0;
+}
+
+.lead__secondary > .tile + .tile {
+  padding-left: 20px;
+  border-left: 1px solid var(--rule);
+}
+
+.rail {
+  padding: 28px 0 32px 28px;
+  border-left: 1px solid var(--rule);
+}
+
+.desk {
+  grid-column: 1 / -1;
+  margin-top: 8px;
+}
+
+.desk__name {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0;
+  padding: 14px 0 10px;
+  border-top: 3px double var(--rule-strong);
+  font: 500 13px/1 var(--font-mono);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.desk__stories {
+  overflow: hidden;
+  margin-inline: calc(var(--tile-pad) * -1);
+}
+
+.desk__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 270px), 1fr));
+  margin: -1px 0 0 -1px;
+}
+
+.desk--brief .desk__grid {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr));
+}
+
+.desk__grid > .tile {
+  padding: 16px var(--tile-pad) 22px;
+  border-top: 1px solid var(--rule);
+  border-left: 1px solid var(--rule);
+}
+
+/* ---------- Tiles ---------- */
+
+.tile__link {
+  display: block;
+  height: 100%;
+  text-decoration: none;
+}
+
+.tile__headline {
+  margin: 8px 0;
+  font: 700 1.45rem/1.12 var(--font-display);
+  letter-spacing: -0.005em;
+  text-wrap: balance;
+}
+
+.tile__dek {
+  margin: 0;
+  color: var(--ink-2);
+  font: 400 1rem/1.5 var(--font-text);
+}
+
+.tile__more {
+  margin: 8px 0 0;
+  color: var(--accent);
+  font: italic 500 0.95rem/1.4 var(--font-text);
+}
+
+.tile__byline {
+  margin: 12px 0 0;
+  color: var(--ink-3);
+  font: 500 11px/1.4 var(--font-mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.tile__link:hover .tile__headline {
+  text-decoration: underline;
+  text-decoration-color: var(--accent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 4px;
+}
+
+.tile__link:focus-visible {
+  outline-offset: 6px;
+}
+
+.tile--lead .tile__headline {
+  margin: 12px 0 14px;
+  font-size: clamp(2.1rem, 4.6vw, 3.7rem);
+  line-height: 1.02;
+  letter-spacing: -0.015em;
+}
+
+.tile--lead .tile__dek {
+  max-width: 60ch;
+  font-size: clamp(1.15rem, 1.6vw, 1.35rem);
+}
+
+.tile--brief .tile__headline {
+  font-size: 1.15rem;
+}
+
+.tile--brief .tile__dek {
+  font-size: 0.95rem;
+}
+
+.rail .tile {
+  padding: 18px 0;
+}
+
+.rail .tile:first-child {
+  padding-top: 0;
+}
+
+.rail .tile + .tile {
+  border-top: 1px solid var(--rule);
+}
+
+.rail .tile__headline {
+  font-size: 1.3rem;
+}
+
+.rail .tile--now {
+  padding: 16px;
+  margin-bottom: 18px;
+  border: 1px solid var(--rule-strong);
+  background: var(--paper-2);
+}
+
+.rail .tile--now + .tile {
+  border-top: 0;
+}
+
+.rail .tile--now .tile__headline {
+  display: none; /* "Now" is already the kicker */
+}
+
+.rail .tile--now .tile__dek {
+  margin-top: 10px;
+  color: var(--ink);
+}
+
+@media (max-width: 880px) {
+  .front {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .lead__secondary > .tile + .tile {
+    padding-left: 0;
+    border-left: 0;
+    border-top: 1px solid var(--rule);
+  }
+
+  .rail {
+    padding: 24px 0;
+    border-top: 1px solid var(--rule);
+    border-left: 0;
+  }
+}
