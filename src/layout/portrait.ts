@@ -224,8 +224,10 @@ function build(page: HTMLElement, figure: HTMLElement, img: HTMLImageElement, si
     const widths = new Map<string, number>()
     const width = (ch: string) => widths.get(ch) ?? widths.set(ch, ctx.measureText(ch).width).get(ch)!
 
-    // The stories, flowed row by row across the strip.
-    const prepared = prep(text, font)
+    // The stories, flowed row by row across the strip. pretext measures every word it's given, so it's
+    // given only what the strip can hold (letters average well over 0.3em across, so this is plenty).
+    const room = Math.ceil((rows * w) / (font.size * 0.3))
+    const prepared = prep(text.length > room ? text.slice(0, text.lastIndexOf(' ', room) + 1 || room) : text, font)
     let cursor = START
     glyphs = []
     for (let row = 0; row < rows; row++) {
