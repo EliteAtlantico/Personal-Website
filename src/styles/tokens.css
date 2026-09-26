@@ -21,7 +21,7 @@
   --chip: rgba(12, 112, 78, 0.1);
   --focus: #0c704e;
   --draft: #a25a02;
-  --chip-body: #0c704e;
+  --chip-body: #344c42;
   --chip-ink: #f6f2e9;
 
   --font-display: 'Fraunces Variable', Georgia, 'Times New Roman', serif;
@@ -51,7 +51,7 @@
     --chip: rgba(12, 112, 78, 0.28);
     --focus: #30a67f;
     --draft: #fc8c02;
-    --chip-body: #0b4633;
+    --chip-body: #222f2a;
     --chip-ink: #eef3f0;
     color-scheme: dark;
   }
@@ -70,7 +70,7 @@
   --chip: rgba(12, 112, 78, 0.28);
   --focus: #30a67f;
   --draft: #fc8c02;
-  --chip-body: #0b4633;
+  --chip-body: #222f2a;
   --chip-ink: #eef3f0;
   color-scheme: dark;
 }

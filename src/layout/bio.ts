@@ -418,18 +418,19 @@ interface Point2 {
   y: number
 }
 
-/** Where the pads sit along a side of the board (board coordinates): every 17px, clear of the corners. */
+/** Where the pads sit along a side of the board (board coordinates): every 22px, clear of the corners. */
 function padsAlong(length: number) {
   const at: number[] = []
-  for (let p = 22; p <= length - 22; p += 17) at.push(p)
+  for (let p = 24; p <= length - 24; p += 22) at.push(p)
   return at
 }
 
 /**
- * The board: its edge (it has some thickness), the solder mask with a sheen,
- * gold half-holes along every side like a module made to be soldered onto a
- * bigger board, mounting holes, a few tiny parts and the silkscreen. The copper
- * (traces()) goes in between, under the mask's sheen.
+ * The board, drawn flat like an illustration of one: its edge (it has some
+ * thickness), the matte solder mask, brass half-holes along every side like a
+ * module made to be soldered onto a bigger board, mounting holes, a few tiny
+ * parts and the silkscreen. The copper (traces()) goes on the mask, a shade
+ * lighter than it, as copper under a mask shows.
  */
 function drawChip(svg: SVGSVGElement, width: number, height: number) {
   const w = width + PIN * 2
@@ -439,10 +440,10 @@ function drawChip(svg: SVGSVGElement, width: number, height: number) {
   const pads: string[] = []
   const notches: string[] = []
   const castellate = (x: number, y: number, side: 'left' | 'right' | 'top' | 'bottom') => {
-    // 3px over the edge, 7px onto the board, with the plated half-hole at the edge.
-    if (side === 'left' || side === 'right') pads.push(`<rect x="${side === 'left' ? x - 3 : x - 7}" y="${y - 3}" width="10" height="6" rx="1.2"/>`)
-    else pads.push(`<rect x="${x - 3}" y="${side === 'top' ? y - 3 : y - 7}" width="6" height="10" rx="1.2"/>`)
-    notches.push(`<circle cx="${x}" cy="${y}" r="1.9"/>`)
+    // 2px over the edge, 6px onto the board, with the plated half-hole at the edge.
+    if (side === 'left' || side === 'right') pads.push(`<rect x="${side === 'left' ? x - 2 : x - 6}" y="${y - 2.5}" width="8" height="5" rx="1"/>`)
+    else pads.push(`<rect x="${x - 2.5}" y="${side === 'top' ? y - 2 : y - 6}" width="5" height="8" rx="1"/>`)
+    notches.push(`<circle cx="${x}" cy="${y}" r="1.5"/>`)
   }
   for (const y of padsAlong(height)) castellate(x0, y0 + y, 'left'), castellate(x1, y0 + y, 'right')
   for (const x of padsAlong(width)) castellate(x0 + x, y0, 'top'), castellate(x0 + x, y1, 'bottom')
@@ -452,19 +453,14 @@ function drawChip(svg: SVGSVGElement, width: number, height: number) {
     [x0 + 8.5, y1 - 8.5],
     [x1 - 8.5, y1 - 8.5],
   ]
-  // A resistor and two capacitors in the margins (an 0402 part is a dark body between two gold ends).
+  // A resistor and two capacitors in the margins (an 0402 part is a dark body between two metal ends).
   const part = (x: number, y: number) => `<rect class="bio__part" x="${x}" y="${y}" width="7" height="3.6" rx="0.6"/><rect x="${x - 1.4}" y="${y}" width="2" height="3.6" rx="0.5"/><rect x="${x + 6.4}" y="${y}" width="2" height="3.6" rx="0.5"/>`
   svg.setAttribute('viewBox', `0 0 ${w} ${h}`)
   svg.setAttribute('width', String(w))
   svg.setAttribute('height', String(h))
-  svg.innerHTML = `<defs>
-      <linearGradient id="bio-sheen" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0.16"/><stop offset="0.45" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity="0.18"/></linearGradient>
-      <linearGradient id="bio-gold" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f7e19a"/><stop offset="0.5" stop-color="#d6a846"/><stop offset="1" stop-color="#a97c2c"/></linearGradient>
-    </defs>
-    <path class="bio__edge" d="${board}" transform="translate(0 4)"/>
+  svg.innerHTML = `<path class="bio__edge" d="${board}" transform="translate(0 3)"/>
     <path class="bio__body" d="${board}"/>
     <g class="bio__traces"></g>
-    <path class="bio__sheen" d="${board}"/>
     <g class="bio__pads">${pads.join('')}${part(x1 - 44, y0 + 6)}${part(x0 + 76, y1 - 10)}${part(x0 + 92, y1 - 10)}</g>
     <g class="bio__notches">${notches.join('')}</g>
     <g class="bio__holes">${holes.map(([cx, cy]) => `<circle class="bio__ring" cx="${cx}" cy="${cy}" r="4.4"/><circle class="bio__hole" cx="${cx}" cy="${cy}" r="2.4"/>`).join('')}</g>
