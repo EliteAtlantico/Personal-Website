@@ -46,6 +46,17 @@
     margin-right: 18px;
   }
 
+  /* No word banner on a phone: its letters are pushed aside by a pointer, which a touchscreen doesn't
+     have, and this narrow it's a sliver of type too small to read. The name line sits right under the
+     strip, as it does without a banner. */
+  .masthead__banner {
+    display: none;
+  }
+
+  .masthead__banner + .masthead__tagline {
+    margin-top: 0;
+  }
+
   /* What's scrolled to (a focused link, say) lands clear of the tabs stuck over the top. */
   html:has(.front.is-app) {
     scroll-padding-top: 56px;
