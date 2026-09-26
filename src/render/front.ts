@@ -26,9 +26,11 @@ export function renderFront(site: Site) {
   const leftovers = site.items.filter((item) => !used.has(item.slug))
   if (leftovers.length) desks.push({ desk: { name: 'More', items: [] }, items: leftovers })
 
+  const shown = desks.filter(({ items }) => items.length)
   return `${masthead(site, 'full', 'paper')}
+${tabs(site, lead !== undefined, shown.map(({ desk }) => desk))}
 <main id="main" class="front">
-  ${lead ? `<section class="lead" aria-label="Top stories">
+  ${lead ? `<section class="lead" id="top" aria-label="Top stories">
     ${tile(site, lead, 'lead', 2)}
     ${jump(lead)}
     ${secondary.length ? `<div class="lead__secondary">${secondary.map((item) => tile(site, item)).join('')}</div>` : ''}
@@ -38,13 +40,22 @@ export function renderFront(site: Site) {
     ${bio(site)}
     ${rail.map((item) => tile(site, item, item.section === 'now' ? 'now' : 'rail')).join('')}
   </aside>
-  ${desks
-    .filter(({ items }) => items.length)
-    .map(({ desk, items }) => deskSection(site, desk, items))
-    .join('')}
+  ${shown.map(({ desk, items }) => deskSection(site, desk, items)).join('')}
 </main>
 ${footer(site)}`
 }
+
+/**
+ * On a phone, the sections as tabs across the top (layout/app.ts turns the page
+ * into a panel per tab). Without JavaScript they're links down the page; on a
+ * wider screen they're hidden, since the whole front page fits.
+ */
+function tabs(site: Site, top: boolean, desks: Desk[]) {
+  const sections = [...(top ? [['top', 'Top']] : []), ...desks.map((desk) => [deskId(desk), desk.name]), ...(site.bio ? [['about', 'About']] : [])]
+  return `<nav class="tabs" aria-label="Sections">${sections.map(([id, name]) => `<a class="tabs__tab" href="#${id}" data-panel="${id}">${esc(name!)}</a>`).join('')}</nav>`
+}
+
+const deskId = (desk: Desk) => `desk-${desk.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
 
 /** The lead story's opening paragraphs, set on the front page like a newspaper jump. */
 function jump(item: Item) {
@@ -58,14 +69,14 @@ function jump(item: Item) {
 /** "About the editor": the bio, which stage-2 layout sets inside a microchip silhouette. */
 function bio(site: Site) {
   if (!site.bio) return ''
-  return `<section class="bio" aria-labelledby="bio-h">
+  return `<section class="bio" id="about" aria-labelledby="bio-h">
     <h2 class="kicker bio__label" id="bio-h"><span class="kicker__desk">${esc(site.bio.title)}</span></h2>
     <div class="bio__chip"><p class="bio__text">${esc(site.bio.text)}</p></div>
   </section>`
 }
 
 function deskSection(site: Site, desk: Desk, items: Item[]) {
-  const id = `desk-${desk.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
+  const id = deskId(desk)
   const variant = desk.variant === 'briefs' ? 'brief' : 'story'
   return `<section class="desk desk--${variant}" aria-labelledby="${id}">
   <h2 class="desk__name" id="${id}">${esc(desk.name)}</h2>

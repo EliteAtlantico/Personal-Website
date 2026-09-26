@@ -8,7 +8,8 @@ import type { Site } from './content/types'
 import { enhance } from './enhance'
 import { assembleHeadlines } from './layout/assemble'
 import { captureMorph, morph, type Morph } from './layout/morph'
-import { renderPage } from './render/document'
+import { PHONE } from './layout/app'
+import { renderPage, setThemeColors } from './render/document'
 import { findItem, isRoute, normalizePath, VIEW_PATHS } from './render/paths'
 import { calm, choose, type Edition } from './signals'
 import type { View } from './signals/decide'
@@ -74,6 +75,13 @@ export function startRouter(edition: Site, first: HTMLElement) {
   // The visitor changed their mind about personalizing: the same page, laid out again, where they were.
   document.addEventListener('kc:edition', (event) => {
     site = (event as CustomEvent<Edition>).detail.site
+    redraw()
+  })
+  // Across the phone edition's breakpoint (a tablet turned, a window resized), the page is made again for its width.
+  matchMedia(PHONE).addEventListener('change', () => redraw())
+
+  /** The same page, made again and laid out again, where the visitor was. */
+  function redraw() {
     running?.finish()
     const scroll = window.scrollY
     const next = renderPage(site, current)
@@ -85,10 +93,14 @@ export function startRouter(edition: Site, first: HTMLElement) {
     page.replaceWith(fresh)
     page = fresh
     void enhance(page, controller.signal, site).then(() => window.scrollTo(0, scroll))
-  })
+  }
 
   window.addEventListener('popstate', (event) => {
-    void show(normalizePath(location.pathname), { forward: false, scrollY: (event.state as NavState | null)?.scrollY })
+    const to = normalizePath(location.pathname)
+    // A link within the page (the skip link, #main) is a step in the history too, but it's still this
+    // page: the browser scrolls to it, and the page must stay, or what the link points at would be gone.
+    if (to === current) return
+    void show(to, { forward: false, scrollY: (event.state as NavState | null)?.scrollY })
   })
 
   // Esc closes a story: back to wherever it was opened from (the front page, another story),
@@ -118,6 +130,7 @@ export function startRouter(edition: Site, first: HTMLElement) {
     page = template.content.firstElementChild as HTMLElement
     app!.append(page)
     document.title = next.title
+    setThemeColors(next.kind)
 
     controller.abort()
     controller = new AbortController()
@@ -139,6 +152,9 @@ export function startRouter(edition: Site, first: HTMLElement) {
     await Promise.race([settled, new Promise((resolve) => setTimeout(resolve, 900))])
     flight?.finish()
     old.remove()
+    // The morph kept what it flew to hidden, so focus couldn't go there then (and went nowhere once the
+    // old page was gone). Now it can, unless the visitor has already put it somewhere on the new page.
+    if (!page.contains(document.activeElement)) focusAfter(page, next.kind === 'front' ? fromSlug : undefined)
     // Let the old page go: nothing may keep pointing at it once it's gone (a finished morph holds its headline).
     fadeOut.cancel()
     if (running === flight) running = null

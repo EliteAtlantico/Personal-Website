@@ -1,21 +1,22 @@
-// Attacks on the site as it's deployed: Cloudflare's edge, the Worker, the
-// copy of the site it serves, and the desk behind it once the tunnel is up.
-// The other suites test what's built here; this one tests what visitors get,
-// which also depends on how Cloudflare is set up (TLS, redirects, what was
-// uploaded, anything Cloudflare adds to the pages). Requests are written
-// straight to the socket, one at a time, so a path reaches the Worker exactly
-// as an attacker typed it. It reads only; then it runs the browser attacks
-// on the real pages.
+// Attacks on the site as it's deployed: Cloudflare's edge, which serves the
+// pages and files (with the headers in dist/_headers), and the Worker, which
+// answers /api/*. The other suites test what's built here; this one tests what
+// visitors get, which also depends on how Cloudflare is set up (TLS,
+// redirects, what was uploaded, anything Cloudflare adds to the pages).
+// Requests are written straight to the socket, one at a time, so a path
+// arrives exactly as an attacker typed it. It reads only; then it runs the
+// browser attacks on the real pages.
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
+import { readFileSync } from 'node:fs'
 import net from 'node:net'
 import tls from 'node:tls'
 import { attackBrowser } from './browser'
 import { Checks, type Finding } from './checks'
 import { PHONES, SECRETS } from './repo'
 
-/** The site until it has a domain (SITE_URL, or an address given on the command line, tests another). */
-export const LIVE = 'https://personal-website.khalil-chaghouri.workers.dev'
+/** The site's address, from content/site.json (SITE_URL, or an address given on the command line, tests another). */
+export const LIVE = (JSON.parse(readFileSync('content/site.json', 'utf8')) as { url: string }).url
 
 interface Reply {
   status: number
@@ -90,7 +91,7 @@ const offer = (v) => new Promise((resolve) => {
   return JSON.parse(execFileSync(process.env.NODE ?? 'node', ['-e', script], { encoding: 'utf8' }))
 }
 
-/** Headers every response must carry, whoever sends it (the Worker, the copy, the desk). */
+/** Headers every response must carry, whoever sends it (Cloudflare's edge or the Worker). */
 const REQUIRED: Record<string, (value: string) => boolean> = {
   'strict-transport-security': (v) => Number(/max-age=(\d+)/.exec(v)?.[1] ?? 0) >= 31_536_000,
   'content-security-policy': (v) => /frame-ancestors 'none'/.test(v),
@@ -109,7 +110,7 @@ const PROJECT_PATHS = ['/.assetsignore', '/.DS_Store', '/package.json', '/bun.lo
 /** A link to one of the site's pages ("/now", "/research/brain-freeze"). */
 const LINK = /href="(\/[a-z0-9-]+(?:\/[a-z0-9-]+)?)"/g
 
-/** Addresses on the desk's own network (the LAN, Tailscale) and local host names. */
+/** Addresses on a private network (a LAN, Tailscale) and local host names: nothing of the kind belongs in a page. */
 const INTERNAL = /\b(?:10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|100\.(?:6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.\d{1,3}\.\d{1,3})\b|\b[\w-]+\.(?:local|lan|ts\.net)\b/
 
 export async function attackLive(address = LIVE, { browser = true } = {}): Promise<Finding[]> {
@@ -130,8 +131,7 @@ export async function attackLive(address = LIVE, { browser = true } = {}): Promi
     checks.expect('the site answers over HTTPS with a certificate browsers trust', false, 'high', `status ${home.status}`)
     return checks.findings
   }
-  const desk = JSON.parse((await get('/api/desk')).text || '{}') as { live?: boolean }
-  console.log(`Testing ${site.origin}${desk.live === false ? " (the desk isn't connected, so every page comes from the copy)" : ''}`)
+  console.log(`Testing ${site.origin}`)
 
   // --- Transport ---
   const plain = await send(site, request(site, '/research?x=1'), false)
@@ -166,8 +166,8 @@ export async function attackLive(address = LIVE, { browser = true } = {}): Promi
     ['the 404 page', await get('/no-such-page')],
     ['a redirect', await get('/terminal/')],
     ['the résumé', resume],
-    ['/api/desk', await get('/api/desk')],
     ['/api/visitor', await get('/api/visitor')],
+    ['an address the Worker has nothing for', await get('/api/nothing')],
     ['a refused method', await send(site, request(site, '/', 'POST', { 'Content-Length': '0' }))],
   ]
   for (const [what, target] of [['a script', script], ['a stylesheet', style], ['a font', font], ['a photo', image]] as const) if (target) samples.push([what, await get(target)])
@@ -243,12 +243,6 @@ export async function attackLive(address = LIVE, { browser = true } = {}): Promi
     checks.expect('the published résumé could be read (pdftotext)', false, 'info')
   }
 
-  // --- The Worker fetches only from the desk (SSRF): paths that read as an address of their own ---
-  for (const target of ['/.//example.com/', '/%2e//example.com/', '/a/..//example.com/', '/.///example.com/', '//example.com/', '/\\example.com/']) {
-    const reply = await get(target)
-    checks.expect(`GET ${target} doesn't serve another site`, !/Example Domain/.test(reply.text), 'critical', `status ${reply.status}`)
-  }
-
   // --- Redirects stay on the site ---
   for (const target of ['/.//evil.example/', '//evil.example/', '///evil.example/', '/%2e//evil.example/', '/\\/evil.example/', '/%5c%5cevil.example/', '/%2f%2fevil.example/', '/.%2f%2fevil.example/', '/.//evil.example/index.html', '/.//evil.example.html', '//evil.example/terminal/', '/terminal/..//evil.example/']) {
     const reply = await get(target)
@@ -261,6 +255,8 @@ export async function attackLive(address = LIVE, { browser = true } = {}): Promi
     checks.expect(`${method} is refused`, reply.status >= 400 && reply.status < 500, 'low', `status ${reply.status}`)
     if (method === 'TRACE') checks.expect('TRACE does not echo the request back', !reply.text.includes('echo-me'), 'medium')
   }
+  const posted = await send(site, request(site, '/api/visitor', 'POST', { 'Content-Length': '0' }))
+  checks.expect('the Worker refuses POST', posted.status === 405, 'low', `status ${posted.status}`)
 
   // --- The APIs ---
   const visitor = await get('/api/visitor', { Origin: 'https://evil.example' })
@@ -268,13 +264,19 @@ export async function attackLive(address = LIVE, { browser = true } = {}): Promi
   checks.expect('/api/visitor cannot be read by other sites (no CORS)', !visitor.headers['access-control-allow-origin'], 'medium', visitor.headers['access-control-allow-origin'])
   checks.expect('/api/visitor is never cached, even by the browser', /private/.test(visitor.headers['cache-control'] ?? '') && /no-store/.test(visitor.headers['cache-control'] ?? ''), 'medium', visitor.headers['cache-control'])
   checks.expect("/api/visitor hands back only the visitor's city, region, country and network", fields.every((f) => ['city', 'region', 'country', 'org', 'eu'].includes(f)), 'low', `fields: ${fields.join(', ')}`)
-  const deskReply = await get('/api/desk', { Origin: 'https://evil.example' })
-  const deskInfo = JSON.parse(deskReply.text || '{}') as { kernel?: string }
-  checks.expect('/api/desk cannot be read by other sites (no CORS)', !deskReply.headers['access-control-allow-origin'], 'low', deskReply.headers['access-control-allow-origin'])
-  checks.expect('/api/desk is never cached', /no-store/.test(deskReply.headers['cache-control'] ?? ''), 'low', deskReply.headers['cache-control'])
-  checks.expect("/api/desk doesn't give the exact kernel build", !/^\d+\.\d+\.\d+/.test(deskInfo.kernel ?? ''), 'low', `kernel: ${deskInfo.kernel}`)
-  const internal = [deskReply, home, terminal, story].map((r) => INTERNAL.exec(`${JSON.stringify(r.headers)}\n${r.text}`)?.[0]).filter(Boolean)
-  checks.expect("nothing gives away addresses on the desk's own network", !internal.length, 'medium', internal.join(', '))
+  const internal = [home, terminal, story].map((r) => INTERNAL.exec(`${JSON.stringify(r.headers)}\n${r.text}`)?.[0]).filter(Boolean)
+  checks.expect('nothing gives away an address on a private network', !internal.length, 'medium', internal.join(', '))
+
+  // --- The picture shared links show: there, the right size, and other sites may show it ---
+  const og = /<meta property="og:image" content="([^"]+)"/.exec(home.text)?.[1]
+  const picture = og && new URL(og).origin === site.origin ? await get(new URL(og).pathname) : undefined
+  const size = picture?.body.length ? [picture.body.readUInt32BE(16), picture.body.readUInt32BE(20)] : []
+  checks.expect(
+    'the picture shared links show is published (og:image, 1200×630), and other sites may show it',
+    picture?.status === 200 && /^image\/png/.test(picture.headers['content-type'] ?? '') && size.join('×') === '1200×630' && !picture.headers['cross-origin-resource-policy'],
+    'low',
+    og ? `${og}: status ${picture?.status}, ${picture?.headers['content-type']}, ${size.join('×')}, cross-origin-resource-policy ${picture?.headers['cross-origin-resource-policy'] ?? 'none'}` : 'no og:image on the front page',
+  )
 
   // --- Cache poisoning: headers a cache ignores mustn't change what the next visitor gets ---
   const fingerprint = (r: Reply) => createHash('sha256').update(r.body).digest('hex')
@@ -308,7 +310,7 @@ export async function attackLive(address = LIVE, { browser = true } = {}): Promi
     const reply = await get(target)
     if (reply.status >= 500 || /Worker threw exception|Error 1101|\bat .+\(.+:\d+:\d+\)|root:x:0:0|"name": "chaghouri-times"/.test(reply.text)) broke.push(`${target.slice(0, 40)} (${reply.status})`)
   }
-  checks.expect('odd addresses never crash the Worker or reach a file outside the site', !broke.length, 'medium', broke.join(', '))
+  checks.expect('odd addresses never break anything, nor reach a file outside the site', !broke.length, 'medium', broke.join(', '))
 
   // --- The real pages, in a browser ---
   return browser ? [...checks.findings, ...(await attackBrowser(site.origin))] : checks.findings

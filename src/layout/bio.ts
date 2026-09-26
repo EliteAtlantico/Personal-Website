@@ -1,7 +1,8 @@
-// "About the editor": the bio set inside a microchip, as a small toy.
+// "About the editor": the bio set on a small circuit board, as a toy.
 //  - The words arrive like snow, each falling into the spot pretext laid out for it.
 //  - The KC die can be dragged (or nudged with the arrow keys); the bio re-flows
-//    around it on every frame.
+//    around it on every frame, and the board's copper traces re-route to stay
+//    soldered to it.
 //  - Click the chip to throw a snowball: nearby words get knocked loose, then
 //    drift back into place.
 // The chip is exactly as tall as the text needs (found by binary search).
@@ -14,8 +15,8 @@ import { prep } from './text'
 
 const PIN = 9
 const INSET = 16
-/** Small enough that only the first line is indented by the pin-1 corner. */
-const CHAMFER = 18
+/** The board's corner radius. */
+const CORNER = 10
 const FONT: FontSpec = { family: FAMILY.text, weight: 400, size: 15 }
 const LINE_HEIGHT = 21
 const DIE_PAD = 9
@@ -87,11 +88,10 @@ export function layoutBio(page: HTMLElement, signal: AbortSignal) {
   let waiting = motion && 'intro' in page.dataset
 
   const shape = (height: number): Point[] => [
-    { x: INSET + CHAMFER, y: INSET },
+    { x: INSET, y: INSET },
     { x: state.width - INSET, y: INSET },
     { x: state.width - INSET, y: height - INSET },
     { x: INSET, y: height - INSET },
-    { x: INSET, y: INSET + CHAMFER },
   ]
   const lay = (height: number, dieY: number) =>
     flow([prepared], {
@@ -160,14 +160,26 @@ export function layoutBio(page: HTMLElement, signal: AbortSignal) {
     render()
   }
 
+  let routed = ''
   const render = () => {
     for (const w of words) w.el.style.transform = `translate(${w.x.toFixed(1)}px, ${w.y.toFixed(1)}px)`
-    die.style.transform = `translate(${(PIN + state.dieX - state.radius).toFixed(1)}px, ${(PIN + state.dieY - state.radius).toFixed(1)}px)`
+    // Its own translate, not transform: picked up, it scales about its middle (scale comes after translate).
+    die.style.translate = `${(PIN + state.dieX - state.radius).toFixed(1)}px ${(PIN + state.dieY - state.radius).toFixed(1)}px`
+    // The copper follows the die: routed again only when the die or the board has moved.
+    const at = `${state.width}|${state.height}|${state.dieX.toFixed(1)}|${state.dieY.toFixed(1)}|${state.radius}`
+    if (at !== routed) {
+      routed = at
+      const [copper, marks] = [art.querySelector('.bio__traces'), art.querySelector('.bio__marks')]
+      const drawn = traces(state.width, state.height, state.dieX, state.dieY, state.radius)
+      if (copper) copper.innerHTML = drawn.copper
+      if (marks) marks.innerHTML = drawn.marks
+    }
   }
 
   const resize = (height: number) => {
     state.height = height
     drawChip(art, state.width, height)
+    routed = ''
     const w = state.width + PIN * 2
     chip.style.width = `${w}px`
     chip.style.height = `${height + PIN * 2}px`
@@ -401,28 +413,112 @@ function child(parent: HTMLElement, className: string, tag: string) {
   return el
 }
 
+interface Point2 {
+  x: number
+  y: number
+}
+
+/** Where the pads sit along a side of the board (board coordinates): every 17px, clear of the corners. */
+function padsAlong(length: number) {
+  const at: number[] = []
+  for (let p = 22; p <= length - 22; p += 17) at.push(p)
+  return at
+}
+
+/**
+ * The board: its edge (it has some thickness), the solder mask with a sheen,
+ * gold half-holes along every side like a module made to be soldered onto a
+ * bigger board, mounting holes, a few tiny parts and the silkscreen. The copper
+ * (traces()) goes in between, under the mask's sheen.
+ */
 function drawChip(svg: SVGSVGElement, width: number, height: number) {
   const w = width + PIN * 2
   const h = height + PIN * 2
-  const pins: string[] = []
-  for (let y = PIN + 20; y <= PIN + height - 20; y += 17) {
-    pins.push(`<rect x="0" y="${y - 2.5}" width="${PIN + 1}" height="5" rx="1"/>`, `<rect x="${w - PIN - 1}" y="${y - 2.5}" width="${PIN + 1}" height="5" rx="1"/>`)
+  const [x0, y0, x1, y1, r] = [PIN, PIN, PIN + width, PIN + height, CORNER]
+  const board = `M${x0 + r} ${y0} H${x1 - r} Q${x1} ${y0} ${x1} ${y0 + r} V${y1 - r} Q${x1} ${y1} ${x1 - r} ${y1} H${x0 + r} Q${x0} ${y1} ${x0} ${y1 - r} V${y0 + r} Q${x0} ${y0} ${x0 + r} ${y0} Z`
+  const pads: string[] = []
+  const notches: string[] = []
+  const castellate = (x: number, y: number, side: 'left' | 'right' | 'top' | 'bottom') => {
+    // 3px over the edge, 7px onto the board, with the plated half-hole at the edge.
+    if (side === 'left' || side === 'right') pads.push(`<rect x="${side === 'left' ? x - 3 : x - 7}" y="${y - 3}" width="10" height="6" rx="1.2"/>`)
+    else pads.push(`<rect x="${x - 3}" y="${side === 'top' ? y - 3 : y - 7}" width="6" height="10" rx="1.2"/>`)
+    notches.push(`<circle cx="${x}" cy="${y}" r="1.9"/>`)
   }
-  for (let x = PIN + 20; x <= PIN + width - 20; x += 17) {
-    pins.push(`<rect x="${x - 2.5}" y="0" width="5" height="${PIN + 1}" rx="1"/>`, `<rect x="${x - 2.5}" y="${h - PIN - 1}" width="5" height="${PIN + 1}" rx="1"/>`)
-  }
-  const r = 5
-  const c = 14
-  const x0 = PIN
-  const y0 = PIN
-  const x1 = PIN + width
-  const y1 = PIN + height
-  const body = `M${x0 + c} ${y0} H${x1 - r} Q${x1} ${y0} ${x1} ${y0 + r} V${y1 - r} Q${x1} ${y1} ${x1 - r} ${y1} H${x0 + r} Q${x0} ${y1} ${x0} ${y1 - r} V${y0 + c} Z`
+  for (const y of padsAlong(height)) castellate(x0, y0 + y, 'left'), castellate(x1, y0 + y, 'right')
+  for (const x of padsAlong(width)) castellate(x0 + x, y0, 'top'), castellate(x0 + x, y1, 'bottom')
+  const holes = [
+    [x0 + 8.5, y0 + 8.5],
+    [x1 - 8.5, y0 + 8.5],
+    [x0 + 8.5, y1 - 8.5],
+    [x1 - 8.5, y1 - 8.5],
+  ]
+  // A resistor and two capacitors in the margins (an 0402 part is a dark body between two gold ends).
+  const part = (x: number, y: number) => `<rect class="bio__part" x="${x}" y="${y}" width="7" height="3.6" rx="0.6"/><rect x="${x - 1.4}" y="${y}" width="2" height="3.6" rx="0.5"/><rect x="${x + 6.4}" y="${y}" width="2" height="3.6" rx="0.5"/>`
   svg.setAttribute('viewBox', `0 0 ${w} ${h}`)
   svg.setAttribute('width', String(w))
   svg.setAttribute('height', String(h))
-  svg.innerHTML = `<g class="bio__pins">${pins.join('')}</g>
-    <path class="bio__body" d="${body}"/>
-    <circle class="bio__dot" cx="${x0 + 9}" cy="${y1 - 9}" r="2.5"/>
-    <text class="bio__silk" x="${x1 - 10}" y="${y1 - 7}" text-anchor="end">U1 · TORONTO / KUWAIT</text>`
+  svg.innerHTML = `<defs>
+      <linearGradient id="bio-sheen" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0.16"/><stop offset="0.45" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity="0.18"/></linearGradient>
+      <linearGradient id="bio-gold" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f7e19a"/><stop offset="0.5" stop-color="#d6a846"/><stop offset="1" stop-color="#a97c2c"/></linearGradient>
+    </defs>
+    <path class="bio__edge" d="${board}" transform="translate(0 4)"/>
+    <path class="bio__body" d="${board}"/>
+    <g class="bio__traces"></g>
+    <path class="bio__sheen" d="${board}"/>
+    <g class="bio__pads">${pads.join('')}${part(x1 - 44, y0 + 6)}${part(x0 + 76, y1 - 10)}${part(x0 + 92, y1 - 10)}</g>
+    <g class="bio__notches">${notches.join('')}</g>
+    <g class="bio__holes">${holes.map(([cx, cy]) => `<circle class="bio__ring" cx="${cx}" cy="${cy}" r="4.4"/><circle class="bio__hole" cx="${cx}" cy="${cy}" r="2.4"/>`).join('')}</g>
+    <g class="bio__marks"></g>
+    <text class="bio__silk" x="${x0 + 17}" y="${y0 + 11}">KC-01 REV A</text>
+    <text class="bio__silk" x="${x1 - 16}" y="${y1 - 7}" text-anchor="end">U1 · TORONTO / KUWAIT</text>`
+}
+
+/**
+ * The copper to the die: from each side of the board, a trace from each of the
+ * two pads nearest it, routed the way a PCB's are (straight out of the pad, one
+ * 45° jog, straight on in), landing on a pad around the die. Each side lands on
+ * its own side of the die, in the same order as its pads, so no two cross. Plus
+ * the die's outline in silkscreen. Board coordinates in, the SVG's out.
+ */
+function traces(width: number, height: number, cx: number, cy: number, radius: number) {
+  const nearest = (positions: number[], at: number) =>
+    [...positions]
+      .sort((a, b) => Math.abs(a - at) - Math.abs(b - at))
+      .slice(0, 2)
+      .sort((a, b) => a - b)
+  const sides = [
+    { pads: nearest(padsAlong(height), cy).map((y) => ({ x: 4, y })), toward: Math.PI, across: true, turn: -1 },
+    { pads: nearest(padsAlong(height), cy).map((y) => ({ x: width - 4, y })), toward: 0, across: true, turn: 1 },
+    { pads: nearest(padsAlong(width), cx).map((x) => ({ x, y: 4 })), toward: -Math.PI / 2, across: false, turn: 1 },
+    { pads: nearest(padsAlong(width), cx).map((x) => ({ x, y: height - 4 })), toward: Math.PI / 2, across: false, turn: -1 },
+  ]
+  const at = (p: Point2) => `${(p.x + PIN).toFixed(1)},${(p.y + PIN).toFixed(1)}`
+  const copper: string[] = []
+  for (const { pads, toward, across, turn } of sides) {
+    pads.forEach((from, i) => {
+      const angle = toward + (i - (pads.length - 1) / 2) * 0.46 * turn
+      const land = { x: cx + Math.cos(angle) * (radius + 3), y: cy + Math.sin(angle) * (radius + 3) }
+      const path = route(from, land, across)
+      copper.push(`<polyline class="bio__trace" points="${path.map(at).join(' ')}"/>`)
+      // A via where every second trace jogs, and a land where each one meets the die.
+      if (i === 1) copper.push(`<circle class="bio__via" cx="${(path[2]!.x + PIN).toFixed(1)}" cy="${(path[2]!.y + PIN).toFixed(1)}" r="2.4"/>`)
+      copper.push(`<circle class="bio__land" cx="${(land.x + PIN).toFixed(1)}" cy="${(land.y + PIN).toFixed(1)}" r="2.2"/>`)
+    })
+  }
+  const marks = `<circle class="bio__outline" cx="${(cx + PIN).toFixed(1)}" cy="${(cy + PIN).toFixed(1)}" r="${(radius + 6.5).toFixed(1)}"/>`
+  return { copper: copper.join(''), marks }
+}
+
+/** Straight out of the pad (across the board if `across`, else up or down it), a 45° jog, then straight on to `to`. */
+function route(from: Point2, to: Point2, across: boolean): Point2[] {
+  const swap = (p: Point2) => (across ? p : { x: p.y, y: p.x })
+  const [f, t] = [swap(from), swap(to)]
+  const out = t.x - f.x
+  const along = t.y - f.y
+  const jog = Math.min(Math.abs(out), Math.abs(along))
+  const straight = (Math.abs(out) - jog) / 2
+  const dir = Math.sign(out) || 1
+  const bend = { x: f.x + dir * straight, y: f.y }
+  const after = { x: bend.x + dir * jog, y: f.y + (Math.sign(along) || 1) * jog }
+  return [f, bend, after, t].map(swap)
 }

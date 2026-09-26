@@ -88,6 +88,8 @@ export interface SiteConfig {
   author: string
   tagline: string
   edition: string
+  /** Where the site lives ("https://…", no trailing slash): shared links and search engines need whole addresses. */
+  url?: string
   lead: string
   /** Stories shown under the lead, side by side. */
   secondary: string[]
@@ -103,6 +105,9 @@ export interface SiteConfig {
     band?: [number, number]
     /** "tone" shades letters by brightness; "silhouette" sets a skyline: dense text for the city, faint for the sky. */
     mode?: 'tone' | 'silhouette'
+    /** What the letters say (the site's own stories without it), and where the words are from, for the colophon. */
+    words?: string
+    wordsFrom?: string
     /** A landmark to emphasize, drawn in the accent colour. */
     landmark?: {
       label: string

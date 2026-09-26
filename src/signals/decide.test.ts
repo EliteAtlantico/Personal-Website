@@ -75,6 +75,8 @@ describe('what the visitor asked for', () => {
     expect(d).toMatchObject({ mode: 'ask', persona: 'recruiter', scores: { recruiter: 3, dev: 0, research: 0 } })
     expect(visit({ timeZone: 'Europe/Berlin', os: 'Linux', browser: 'Firefox' }, { personalize: true })).toMatchObject({ mode: 'on', persona: 'dev' })
     expect(visit({ timeZone: 'America/Toronto', eu: true }).mode).toBe('ask')
+    // The browser always hears yes or no from Cloudflare; a European time zone still counts when it says no.
+    expect(visit({ timeZone: 'Europe/Berlin', eu: false, os: 'Linux', browser: 'Firefox' })).toMatchObject({ mode: 'ask', view: 'paper', scores: { dev: 0 } })
   })
 })
 

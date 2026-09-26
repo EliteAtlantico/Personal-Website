@@ -189,12 +189,20 @@ export function mountGlobe(host: HTMLElement, { site, mode, open }: GlobeOptions
   canvas.addEventListener('webglcontextrestored', setup, { signal })
 
   // --- Labels: the city names, and as many story titles as fit ---
+  // Measured at the size the browser really draws them: a minimum font size (Safari's, say) can make
+  // them bigger than the stylesheet's 10px, and then they'd overrun the room they were placed in.
+  const drawn = document.createElement('span')
+  drawn.className = 'globe__label'
+  layer.append(drawn)
+  const grow = parseFloat(getComputedStyle(drawn).fontSize) / LABEL.size || 1
+  drawn.remove()
+  const labelHeight = LABEL_HEIGHT * grow
   const label = (id: string, at: Vec3, text: string, font: FontSpec, className: string, city: boolean): Label => {
     const el = document.createElement('span')
     el.className = className
     el.textContent = text
     layer.append(el)
-    return { id, at, el, width: Math.ceil(measureNaturalWidth(prep(text, font))) + 1, city, shown: false, x: NaN, y: NaN }
+    return { id, at, el, width: Math.ceil(measureNaturalWidth(prep(text, { ...font, size: font.size * grow }))) + 1, city, shown: false, x: NaN, y: NaN }
   }
   const cityLabels = Object.values(CITIES).map((city) => label(city.id, toVector(city.lat, city.lng, 1.003), city.name.toUpperCase(), CITY, 'globe__label globe__label--city', true))
   const storyLabels = new Map(dots.map(({ pin, at }) => [pin.slug, label(pin.slug, at, bySlug.get(pin.slug)!.title, LABEL, 'globe__label', false)]))
@@ -214,6 +222,7 @@ export function mountGlobe(host: HTMLElement, { site, mode, open }: GlobeOptions
     if (still) {
       view.position = target
       view.update(0)
+      wake()
       return
     }
     const turn = Math.acos(Math.min(1, Math.max(-1, dot(normalize(view.position), normalize(target)))))
@@ -222,6 +231,9 @@ export function mountGlobe(host: HTMLElement, { site, mode, open }: GlobeOptions
 
   // --- Lighting up a story: its dot and label turn orange, and the caption names it ---
   let hot: string | null = null
+  const stops = [...host.querySelectorAll<HTMLElement>('.globe__stories [data-slug]')]
+  stops.forEach((stop, i) => (stop.tabIndex = i ? -1 : 0))
+  signal.addEventListener('abort', () => stops.forEach((stop) => stop.removeAttribute('tabindex')))
   let hotChanged = false
   const setHot = (slug: string | null) => {
     if (slug === hot) return
@@ -230,8 +242,11 @@ export function mountGlobe(host: HTMLElement, { site, mode, open }: GlobeOptions
     hotChanged = true
     for (const [id, { el }] of storyLabels) el.classList.toggle('is-hot', id === slug)
     const item = slug ? bySlug.get(slug) : undefined
-    if (caption) caption.textContent = item ? [item.title, deskName(site, item), cityOf.get(item.slug)].filter((part, i, all) => part && all.indexOf(part) === i).join(' · ') : hint
+    const where = item ? [item.title, deskName(site, item), cityOf.get(item.slug)].filter((part, i, all) => part && all.indexOf(part) === i).join(' · ') : ''
+    // From the keyboard, say how to get to the next one.
+    if (caption) caption.textContent = item ? (stops.includes(document.activeElement as HTMLElement) ? `${where} (\u2191 \u2193 for the others)` : where) : hint
     stage.classList.toggle('is-pointing', !!item)
+    wake()
   }
 
   // --- Where things are on screen ---
@@ -305,11 +320,26 @@ export function mountGlobe(host: HTMLElement, { site, mode, open }: GlobeOptions
   host.addEventListener(
     'focusin',
     (event) => {
-      const slug = (event.target as Element).closest<HTMLElement>('[data-slug]')?.dataset.slug
+      const stop = (event.target as Element).closest<HTMLElement>('[data-slug]')
+      const slug = stop?.dataset.slug
       const dot = slug && dots.find(({ pin }) => pin.slug === slug)
       if (!dot) return
+      // Whichever story has focus (by Tab, arrow, click or screen reader) is the list's one Tab stop.
+      if (stops.includes(stop)) for (const other of stops) other.tabIndex = other === stop ? 0 : -1
       setHot(slug)
       flyTo(dot.at, Math.min(length(view.position), embed ? home : 2.4))
+    },
+    { signal },
+  )
+  // One stop for Tab, not one per story: the arrow keys go from story to story, Home and End to the ends.
+  host.addEventListener(
+    'keydown',
+    (event) => {
+      const at = stops.indexOf(event.target as HTMLElement)
+      const to = at < 0 ? undefined : { ArrowDown: at + 1, ArrowRight: at + 1, ArrowUp: at - 1, ArrowLeft: at - 1, Home: 0, End: stops.length - 1 }[event.key]
+      if (to === undefined || event.altKey || event.ctrlKey || event.metaKey) return
+      event.preventDefault()
+      stops[(to + stops.length) % stops.length]!.focus()
     },
     { signal },
   )
@@ -334,17 +364,21 @@ export function mountGlobe(host: HTMLElement, { site, mode, open }: GlobeOptions
     landScale = (height * ratio) / (2 * Math.tan((FOV * Math.PI) / 360))
   }
   fit()
-  const resizes = new ResizeObserver(fit)
+  // A new size clears the canvas: draw again (even when resting).
+  const resizes = new ResizeObserver(() => {
+    fit()
+    wake()
+  })
   resizes.observe(stage)
 
   // --- The labels, placed every frame (the page is only touched where a label moved or came and went) ---
   const placeAll = () => {
     const anchors: Anchor[] = []
     for (const city of cityLabels) {
-      if (facing(city.at) > 0.3) anchors.push({ id: city.id, ...onScreen(city.at), width: city.width, height: LABEL_HEIGHT, gap: 9, sides: ['above', 'below'] })
+      if (facing(city.at) > 0.3) anchors.push({ id: city.id, ...onScreen(city.at), width: city.width, height: labelHeight, gap: 9, sides: ['above', 'below'] })
     }
     const story = (entry: Label) => {
-      if (facing(entry.at) > (entry.id === hot ? 0.1 : 0.35)) anchors.push({ id: entry.id, ...onScreen(entry.at), width: entry.width, height: LABEL_HEIGHT, gap: 7 })
+      if (facing(entry.at) > (entry.id === hot ? 0.1 : 0.35)) anchors.push({ id: entry.id, ...onScreen(entry.at), width: entry.width, height: labelHeight, gap: 7 })
     }
     const lit = hot ? storyLabels.get(hot) : undefined
     if (lit) story(lit)
@@ -470,14 +504,26 @@ export function mountGlobe(host: HTMLElement, { site, mode, open }: GlobeOptions
       shown = true
       stage.classList.add('is-ready')
     }
+    // Holding still (reduced motion, low battery), there's nothing new to draw once it has stopped
+    // moving: rest until something could change it (a pointer, a story lit up, a turn, a resize).
+    if (still && !flight && !view.moving && !hotChanged) {
+      cancelAnimationFrame(tick)
+      tick = 0
+    }
   }
   const play = () => {
     cancelAnimationFrame(tick)
+    tick = 0
     if (visible && !paused) {
       last = performance.now()
       tick = requestAnimationFrame(loop)
     }
   }
+  /** Draws again if it was resting. */
+  const wake = () => {
+    if (!tick) play()
+  }
+  for (const type of ['pointerdown', 'pointermove', 'wheel'] as const) canvas.addEventListener(type, wake, { signal, passive: true })
   const sight = new IntersectionObserver(([entry]) => {
     visible = !!entry?.isIntersecting
     play()

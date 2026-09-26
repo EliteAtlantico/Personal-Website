@@ -14,7 +14,6 @@ import { frontOrder } from '../globe/places'
 import { fontsReady } from '../layout/fonts'
 import { GLOBE_HINT, globeSummary } from '../render/globe'
 import { navigate } from '../router'
-import { desk, deskSoFar } from '../desk'
 import { calm, choose, edition, forget, seen } from '../signals'
 import { bodyLines } from './body'
 import { createShell, plainText, type Env, type Shell } from './commands'
@@ -58,7 +57,6 @@ const env: Env = {
     return current && { ...current, signals: full ? seen() : current.signals }
   },
   personalize: (on) => void choose({ personalize: on }),
-  desk: deskSoFar,
 }
 
 /** Old lines scroll away past this many. */
@@ -71,8 +69,6 @@ const siteText = (site: Site) => site.items.map(storyText).join(' ')
 
 /** `site` is the visitor's edition of it (src/signals). */
 export function mountTerminal(section: HTMLElement, signal: AbortSignal, site: Site) {
-  // Ask the desk how it's doing now, so `uptime` has an answer by the time anyone types it.
-  void desk()
   const screen = section.querySelector<HTMLElement>('.terminal__screen')
   // The status bar: the window's title follows the current folder, and the clock ticks.
   const page = section.closest('.page') ?? document
@@ -166,21 +162,32 @@ export function mountTerminal(section: HTMLElement, signal: AbortSignal, site: S
   }
 
   // The newest dashboard's map pane has a live globe; older ones up the scrollback keep a picture of theirs.
-  let map: { host: HTMLElement; globe: Globe | null } | null = null
+  // It starts as its pane comes near the screen: on a phone the dashboard is one long column.
+  let map: { host: HTMLElement; globe: Globe | null; near: IntersectionObserver } | null = null
   const mapOn = () => {
     const hosts = output.querySelectorAll<HTMLElement>('.t-pane [data-globe]')
     const host = hosts[hosts.length - 1]
     if (host && map?.host === host) return
+    map?.near.disconnect()
     map?.globe?.dispose((canvas, done) => keepAsPicture(canvas, 'globe__picture', done))
     map = null
     if (!host || !sturdy()) return
-    const entry: { host: HTMLElement; globe: Globe | null } = { host, globe: null }
+    const near = new IntersectionObserver(
+      ([seen]) => {
+        if (!seen?.isIntersecting) return
+        near.disconnect()
+        void globeModule().then((module) => {
+          if (!module || map !== entry || signal.aborted) return
+          entry.globe = module.mountGlobe(host, { site, mode: 'embed', open: (item) => execute(`open ${storyPath(item)}`) })
+          if (covered()) entry.globe?.pause(true)
+        })
+      },
+      { rootMargin: '300px 0px' },
+    )
+    const entry: { host: HTMLElement; globe: Globe | null; near: IntersectionObserver } = { host, globe: null, near }
     map = entry
-    void globeModule().then((module) => {
-      if (!module || map !== entry || signal.aborted) return
-      entry.globe = module.mountGlobe(host, { site, mode: 'embed', open: (item) => execute(`open ${storyPath(item)}`) })
-      if (covered()) entry.globe?.pause(true)
-    })
+    near.observe(host)
+    signal.addEventListener('abort', () => near.disconnect())
   }
 
   // --- Overlays, full screen over the terminal until q / Esc / back: the reader (a story, like less), cmatrix and the globe.
@@ -191,6 +198,8 @@ export function mountTerminal(section: HTMLElement, signal: AbortSignal, site: S
   const cover = (el: HTMLElement, stop = () => {}) => {
     overlays.push({ el, stop })
     section.append(el)
+    // What's underneath can't be tabbed to or clicked while it's hidden (the status bar stays usable).
+    screen.inert = true
     rain?.pause(true)
     map?.globe?.pause(true)
   }
@@ -205,6 +214,7 @@ export function mountTerminal(section: HTMLElement, signal: AbortSignal, site: S
       under.el.focus({ preventScroll: true })
       return
     }
+    screen.inert = false
     rain?.pause(false)
     map?.globe?.pause(false)
     if (fine) focusPrompt()
@@ -316,6 +326,9 @@ export function mountTerminal(section: HTMLElement, signal: AbortSignal, site: S
     (event) => {
       const history = shell.history()
       if (event.key === 'Tab') {
+        // Tab completes what's typed, as in a shell. On an empty line, or with Shift, it moves focus on
+        // as it does everywhere else, so the keyboard can always leave the prompt.
+        if (event.shiftKey || !input.value.trim()) return
         event.preventDefault()
         const { value, options } = shell.complete(input.value)
         if (value !== input.value) input.value = value
@@ -420,7 +433,24 @@ export function mountTerminal(section: HTMLElement, signal: AbortSignal, site: S
     { signal, capture: true },
   )
   // On a phone, focusing would pop the keyboard up over the dashboard; wait for a tap.
-  if (fine) focusPrompt()
+  if (fine) whenShown(() => document.activeElement === document.body && focusPrompt(), signal)
+}
+
+/**
+ * Runs `then` once the page is showing. A page loaded afresh stays hidden
+ * while it's laid out (pt-pending, index.html), and nothing hidden can take
+ * focus.
+ */
+function whenShown(then: () => void, signal: AbortSignal) {
+  const root = document.documentElement
+  if (!root.classList.contains('pt-pending')) return then()
+  const watch = new MutationObserver(() => {
+    if (root.classList.contains('pt-pending')) return
+    watch.disconnect()
+    if (!signal.aborted) then()
+  })
+  watch.observe(root, { attributes: true, attributeFilter: ['class'] })
+  signal.addEventListener('abort', () => watch.disconnect())
 }
 
 /**

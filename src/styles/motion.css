@@ -4,6 +4,9 @@
 
 .page {
   background: var(--paper);
+  /* Letters flying in (the headlines' swarm, the bio's snowfall) can start past the side of the
+     screen, where they can't be seen anyway; they mustn't make the page scroll sideways meanwhile. */
+  overflow-x: clip;
 }
 
 .morph {

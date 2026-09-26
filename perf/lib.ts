@@ -35,6 +35,13 @@ export function findChrome(): string {
     '/usr/bin/chromium-browser',
   ]
   const home = os.homedir()
+  // Puppeteer's headless-only build: bunx @puppeteer/browsers install chrome-headless-shell@stable --path ~/.cache/puppeteer
+  const shells = path.join(home, '.cache/puppeteer/chrome-headless-shell')
+  if (existsSync(shells)) {
+    for (const build of readdirSync(shells).sort().reverse()) {
+      for (const platform of ['mac-arm64', 'mac-x64', 'linux64']) candidates.push(path.join(shells, build, `chrome-headless-shell-${platform}`, 'chrome-headless-shell'))
+    }
+  }
   for (const cache of [path.join(home, 'Library/Caches/ms-playwright'), path.join(home, '.cache/ms-playwright')]) {
     if (!existsSync(cache)) continue
     const builds = readdirSync(cache)
@@ -60,9 +67,11 @@ export function findChrome(): string {
  * functions get hot, which would look like a leak (it isn't: it levels off).
  */
 export function launch({ steady = false } = {}): Promise<Browser> {
+  const executablePath = findChrome()
   return puppeteer.launch({
-    executablePath: findChrome(),
-    headless: true,
+    executablePath,
+    // The headless-only build runs the older headless mode; full Chrome, the new one.
+    headless: executablePath.endsWith('chrome-headless-shell') ? 'shell' : true,
     defaultViewport: null,
     args: [
       // Exact heap numbers, and gc() for the page, so a leak isn't lost in the noise.

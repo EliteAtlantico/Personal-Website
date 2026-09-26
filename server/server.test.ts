@@ -5,7 +5,8 @@ import type { AddressInfo } from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
 import { gzipSync } from 'node:zlib'
-import worker, { type Cf, type Env } from '../edge/worker'
+import worker, { type Cf } from '../edge/worker'
+import { headersFile, HSTS, SECURITY, SHARED } from './headers'
 import { canonicalPath, site } from './site'
 
 let dist: string
@@ -22,14 +23,15 @@ beforeAll(async () => {
     'assets/app-1a2b.js': 'console.log("app")',
     'assets/app-1a2b.js.gz': gzipSync('console.log("app")'),
     'media/clip.mp4': Buffer.from('0123456789'),
+    'og.png': Buffer.from('png'),
+    _headers: headersFile(),
   }
   for (const [file, body] of Object.entries(files)) {
     await mkdir(path.dirname(path.join(dist, file)), { recursive: true })
     await writeFile(path.join(dist, file), body)
   }
   await writeFile(path.join(os.tmpdir(), 'kc-site-secret.txt'), 'secret')
-  const desk = async () => ({ live: true as const, name: 'my Arch desktop', uptime: 170_000, load: [1.15, 14.34, 33.39], cpu: 61, system: 'Linux', kernel: '7.2.6-arch2-1', cores: 24 })
-  server = createServer(site({ dist, desk }))
+  server = createServer(site({ dist }))
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
   base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
 })
@@ -41,7 +43,7 @@ afterAll(async () => {
 
 const get = (pathname: string, headers: Record<string, string> = {}) => fetch(base + pathname, { headers, redirect: 'manual' })
 
-describe('the desk serves the site', () => {
+describe('the local server serves the site', () => {
   test('clean addresses: / and /projects/x are pages; the page file names redirect to them', async () => {
     expect(await (await get('/')).text()).toBe('<h1>front</h1>')
     expect(await (await get('/projects/butler-bot')).text()).toBe('<h1>butler</h1>')
@@ -90,57 +92,45 @@ describe('the desk serves the site', () => {
     expect((await get('/media/clip.mp4', { range: 'bytes=20-' })).status).toBe(416)
   })
 
-  test('/api/desk says how the desk is doing, fresh every time', async () => {
-    const response = await get('/api/desk')
-    expect(response.headers.get('cache-control')).toBe('no-store')
-    expect(await response.json()).toMatchObject({ live: true, name: 'my Arch desktop', cpu: 61, cores: 24 })
+  test('/api/visitor knows nothing here (only Cloudflare can see where a visitor is); other methods are refused', async () => {
     expect(await (await get('/api/visitor')).json()).toEqual({})
-    expect((await get('/api/nothing')).status).toBe(404)
+    expect((await get('/api/desk')).status).toBe(404)
     expect((await fetch(base + '/', { method: 'POST' })).status).toBe(405)
+  })
+
+  test("the picture a shared link carries may be shown by other sites; nothing else may; Cloudflare's rules aren't a page", async () => {
+    expect((await get('/og.png')).headers.get('cross-origin-resource-policy')).toBeNull()
+    expect((await get('/')).headers.get('cross-origin-resource-policy')).toBe('same-origin')
+    expect((await get('/_headers')).status).toBe(404)
   })
 })
 
-describe('the Worker in front of it', () => {
-  const copy: Env['ASSETS'] = { fetch: async (request) => new Response(`copy of ${new URL(request.url).pathname}`) }
-  const ask = (pathname: string, env: Env, cf?: Cf) => worker.fetch(Object.assign(new Request(`https://chaghouri.example${pathname}`), { cf }), env)
+describe("Cloudflare's _headers file", () => {
+  test('every file gets every security header, and HSTS; the shared picture drops only the embedding rule', () => {
+    const file = headersFile()
+    const [all, ...shared] = file.split(/\n(?=\/)/)
+    expect(all!.split('\n')[0]).toBe('/*')
+    for (const [name, value] of Object.entries(SECURITY)) expect(all).toContain(`  ${name}: ${value}\n`)
+    expect(all).toContain(`  strict-transport-security: ${HSTS}`)
+    expect(shared.map((rule) => rule.split('\n')[0])).toEqual(SHARED)
+    for (const rule of shared) expect(rule.trim().split('\n').slice(1)).toEqual(['  ! cross-origin-resource-policy'])
+  })
+})
+
+describe('the Worker', () => {
+  const ask = (pathname: string, cf?: Cf, method = 'GET') => worker.fetch(Object.assign(new Request(`https://chaghouri.example${pathname}`, { method }), { cf }))
 
   test('it answers /api/visitor from what Cloudflare saw, and keeps none of it', async () => {
-    const response = await ask('/api/visitor', { ASSETS: copy }, { city: 'Toronto', country: 'CA', asOrganization: 'University of Toronto', isEUCountry: '0' })
+    const response = await ask('/api/visitor', { city: 'Toronto', country: 'CA', asOrganization: 'University of Toronto', isEUCountry: '0' })
     expect(await response.json()).toEqual({ city: 'Toronto', country: 'CA', org: 'University of Toronto', eu: false })
     expect(response.headers.get('cache-control')).toBe('private, no-store')
+    expect(response.headers.get('x-frame-options')).toBe('DENY')
+    expect(response.headers.get('strict-transport-security')).toBe(HSTS)
   })
 
-  test('www. goes to the one address', async () => {
-    const response = await worker.fetch(new Request('https://www.chaghouri.example/projects/butler-bot?from=card'), { ASSETS: copy })
-    expect(response.status).toBe(308)
-    expect(response.headers.get('location')).toBe('https://chaghouri.example/projects/butler-bot?from=card')
-  })
-
-  test("the build's own files come from the copy, and from the desk only if the copy hasn't got them", async () => {
-    const has = { fetch: async (request: Request) => new URL(request.url).pathname === '/assets/app-1a2b.js' ? new Response('copy of app') : new Response('missing', { status: 404 }) }
-    const edge = await ask('/assets/app-1a2b.js', { ASSETS: has, ORIGIN: base })
-    expect(await edge.text()).toBe('copy of app')
-    expect(edge.headers.get('x-served-from')).toBe('copy')
-    const newer = await ask('/assets/app-1a2b.js', { ASSETS: { fetch: async () => new Response('missing', { status: 404 }) }, ORIGIN: base })
-    expect(await newer.text()).toBe('console.log("app")')
-    expect(newer.headers.get('x-served-from')).toBe('desk')
-  })
-
-  test('everything else comes from the desk while it answers', async () => {
-    const response = await ask('/projects/butler-bot', { ASSETS: copy, ORIGIN: base })
-    expect(await response.text()).toBe('<h1>butler</h1>')
-    expect(response.headers.get('x-served-from')).toBe('desk')
-    const desk = await ask('/api/desk', { ASSETS: copy, ORIGIN: base })
-    expect(await desk.json()).toMatchObject({ live: true })
-  })
-
-  test("when the desk is asleep, the copy (and /api/desk says it's asleep)", async () => {
-    const asleep = { ASSETS: copy, ORIGIN: 'http://127.0.0.1:9' }
-    const response = await ask('/projects/butler-bot', asleep)
-    expect(await response.text()).toBe('copy of /projects/butler-bot')
-    expect(response.headers.get('x-served-from')).toBe('copy')
-    expect(await (await ask('/api/desk', asleep)).json()).toEqual({ live: false })
-    // Without a desk configured at all (before there's a domain), it's always the copy.
-    expect((await ask('/', { ASSETS: copy })).headers.get('x-served-from')).toBe('copy')
+  test('anything else sent its way is a 404, and only GET and HEAD are answered', async () => {
+    expect((await ask('/api/desk')).status).toBe(404)
+    expect((await ask('/projects/butler-bot')).status).toBe(404)
+    expect((await ask('/api/visitor', undefined, 'POST')).status).toBe(405)
   })
 })

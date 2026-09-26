@@ -83,7 +83,9 @@ export function decide(signals: Partial<Signals>, prefs: Prefs = {}): Decision {
   if (prefs.personalize === false) return plain('off')
   if (signals.gpc) return plain('gpc')
   if (signals.dnt) return plain('dnt')
-  const europe = signals.eu ?? !!signals.timeZone?.startsWith('Europe/')
+  // Either says Europe: Cloudflare (the connection) or the time zone (someone on a VPN, in the UK or
+  // Switzerland, or when Cloudflare didn't answer in time).
+  const europe = !!signals.eu || !!signals.timeZone?.startsWith('Europe/')
   const mode = europe && prefs.personalize !== true ? 'ask' : 'on'
 
   // Until a visitor in Europe says yes, only the link they followed counts.

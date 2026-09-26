@@ -6,6 +6,7 @@
 import { createHash } from 'node:crypto'
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
+import { headersFile } from '../server/headers'
 import { loadSite } from '../src/content/load'
 import { injectPage, renderPage, routes, type Page } from '../src/render/document'
 import { buildMedia } from './media'
@@ -45,7 +46,7 @@ function preloads(kind: Page['kind']) {
  * its hash; nothing is loaded from anywhere else, except YouTube's player once
  * a visitor asks for a video. If anything ever slipped past the escaping, the
  * browser still wouldn't run it. (What a <meta> can't say, that no other site
- * may frame the page, is a header: server/headers.ts.)
+ * may frame the page, is a header: server/headers.ts, written into dist/_headers below.)
  */
 const inline = [...template.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(([, code]) => `'sha256-${createHash('sha256').update(code!).digest('base64')}'`)
 const CSP = [
@@ -70,12 +71,15 @@ for (const [route, file] of pages) {
   const out = path.join(dist, file)
   const page = renderPage(site, route)
   await mkdir(path.dirname(out), { recursive: true })
-  const html = injectPage(template, page)
+  const html = injectPage(template, page, site.config)
     .replace('<meta charset="utf-8">', `<meta charset="utf-8">\n    <meta http-equiv="Content-Security-Policy" content="${CSP}">`)
     .replace('</head>', `  ${preloads(page.kind).join('\n    ')}\n  </head>`)
   if (!html.includes('http-equiv="Content-Security-Policy"')) throw new Error('prerender: no <meta charset="utf-8"> to put the Content-Security-Policy after')
   await writeFile(out, html)
 }
+
+// Cloudflare serves the pages and files itself (wrangler.jsonc), with these headers (server/headers.ts).
+await writeFile(path.join(dist, '_headers'), headersFile())
 
 const variants = await buildMedia(path.join(dist, 'media'))
 console.log(`prerendered ${pages.length} pages (${site.items.length} stories) and ${variants} image sizes into dist/`)

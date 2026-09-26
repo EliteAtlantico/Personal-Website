@@ -1,26 +1,17 @@
-// The front door (edge/worker.ts), and the copy of the site it keeps for when
-// the desk is asleep. `bun run deploy` builds everything and runs `wrangler
-// deploy`; deploy/README.md has the one-time setup.
+// The site on Cloudflare: dist/, served from Cloudflare's edge, and the Worker
+// (edge/worker.ts), which answers /api/*. Cloudflare builds and deploys main
+// on every push.
 {
-  // The Worker Cloudflare builds and deploys from GitHub on every push to main.
+  // The Worker's name in Cloudflare's dashboard.
   "name": "personal-website",
   "main": "edge/worker.ts",
   "compatibility_date": "2026-09-01",
   "assets": {
     "directory": "./dist",
-    "binding": "ASSETS",
-    // The Worker sees every request first, so it can ask the desk before falling back to the copy.
-    "run_worker_first": true,
+    // Only /api/* runs the Worker. Pages and files come straight from the edge, with the
+    // headers in dist/_headers: faster, free, and still up if the Worker's daily limit runs out.
+    "run_worker_first": ["/api/*"],
     "html_handling": "auto-trailing-slash",
     "not_found_handling": "404-page"
-  },
-  "vars": {
-    // The desk's own address, through the tunnel (e.g. "https://desk.example.com").
-    // Empty until the tunnel exists: the Worker then always serves the copy.
-    "ORIGIN": ""
   }
-  // Once there's a domain, the site's addresses (the Worker sends www. to the
-  // bare one), and no more workers.dev copy of it:
-  // "routes": [{ "pattern": "example.com", "custom_domain": true }, { "pattern": "www.example.com", "custom_domain": true }],
-  // "workers_dev": false
 }

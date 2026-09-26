@@ -511,6 +511,11 @@ body:has(> #app > .page--terminal:last-child) {
   white-space: pre;
 }
 
+/* Where the keyboard is: the caret blinks in the prompt; when focus is elsewhere, the prompt dims. */
+.terminal.is-live .terminal__prompt:not(:focus-within) label {
+  opacity: 0.45;
+}
+
 .terminal__prompt input {
   flex: 1;
   min-width: 0;

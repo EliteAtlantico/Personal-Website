@@ -120,8 +120,8 @@ export function facts(s: Partial<Signals>): Facts[] {
       rows: [
         ['Time zone', read(s.timeZone)],
         ['Local time', s.day !== undefined && s.hour !== undefined ? `${DAYS[s.day]}, around ${s.hour % 12 || 12} ${s.hour < 12 ? 'a.m.' : 'p.m.'}` : 'not read'],
-        ['City', read(s.city && [s.city, s.region, s.country].filter(Boolean).join(', '), 'not known here yet (Cloudflare will say, once this site is hosted)')],
-        ['Network', read(s.org, 'not known here yet (the same)')],
+        ['City', read(s.city && [s.city, s.region, s.country].filter(Boolean).join(', '), "not known (Cloudflare didn't say)")],
+        ['Network', read(s.org, "not known (Cloudflare didn't say)")],
       ],
     },
   ]

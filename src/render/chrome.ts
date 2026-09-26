@@ -57,6 +57,7 @@ function banner(site: Site) {
       ? ` data-landmark="${esc(JSON.stringify(settings.landmark.outline))}" data-landmark-label="${esc(settings.landmark.label)}"`
       : '',
     settings.skyline ? ` data-skyline="${esc(settings.skyline)}"` : '',
+    settings.words ? ` data-words="${esc(settings.words)}"` : '',
   ].join('')
   const figure = coverFigure(site.banner, 'masthead__banner', 3, '(max-width: 1280px) 100vw, 1280px')
   return (
@@ -73,7 +74,7 @@ function banner(site: Site) {
 export function footer(site: Site) {
   const year = new Date(site.builtAt).getFullYear()
   return `<footer class="colophon">
-  <p>© ${year} ${esc(site.config.author)}. Set in Fraunces, Newsreader and IBM Plex Mono.</p>
+  <p>© ${year} ${esc(site.config.author)}. Set in Fraunces, Newsreader and IBM Plex Mono.${site.config.banner?.wordsFrom ? ` The skyline is set in words from ${esc(site.config.banner.wordsFrom)}.` : ''}</p>
   <p>No cookies, no trackers. <a href="/resume.pdf">Résumé (PDF)</a></p>
 </footer>`
 }

@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
 import { loadSite } from '../content/load'
-import type { Reading } from '../desk'
 import { decide } from '../signals/decide'
 import { createShell, parse, plainText, type Env, type Shell, type Visitor } from './commands'
 import { lineHtml } from './html'
@@ -18,7 +17,7 @@ let raining: number
 let globes: number
 let personalized: boolean[]
 let visitor: Visitor | undefined
-let deskReading: Reading | null
+let env: Env
 let shell: Shell
 beforeEach(() => {
   navigated = []
@@ -28,8 +27,7 @@ beforeEach(() => {
   globes = 0
   personalized = []
   visitor = undefined
-  deskReading = null
-  const env: Env = {
+  env = {
     navigate: (path) => navigated.push(path),
     read: (title, lines) => reading.push({ title, lines }),
     matrix: () => raining++,
@@ -43,7 +41,6 @@ beforeEach(() => {
     site: () => site,
     visitor: () => visitor,
     personalize: (on) => personalized.push(on),
-    desk: () => deskReading,
   }
   shell = createShell(site, env)
 })
@@ -209,16 +206,14 @@ describe('who you are, to the site', () => {
   })
 })
 
-describe('the desk', () => {
-  test("uptime is the desk's own while it serves the site; asleep, it says so", () => {
-    const now = new Date('2026-09-24T16:04:12-04:00').getTime()
-    deskReading = { desk: { live: true, name: 'my Arch desktop', uptime: 170_000, load: [1.15, 14.34, 33.39], cpu: 61, system: 'Linux', kernel: '7.2.6-arch2-1', cores: 24 }, at: now }
-    const live = text(shell.run('uptime'))
-    expect(live).toContain('up 1 day, 23:13,  1 user,  load average: 1.15, 14.34, 33.39')
-    expect(live).toContain('Served live from my Arch desktop (Linux 7.2.6-arch2-1, 24 cores, CPU at 61°C).')
-    expect(text(shell.run('neofetch'))).toContain('Uptime')
-    deskReading = { desk: { live: false }, at: now }
-    expect(text(shell.run('uptime'))).toContain('My desk is asleep')
+describe('uptime', () => {
+  test("is this version of the site's: since it was built, with no claim to a machine behind it", () => {
+    const built = new Date(env.now().getTime() - (47 * 3600 + 13 * 60) * 1000).toISOString()
+    const out = text(createShell({ ...site, builtAt: built }, env).run('uptime'))
+    expect(out).toContain('up 1 day, 23:13,  1 user,  load average: 0.00, 0.00, 0.00')
+    expect(out).toContain('This version of the site was built Sep 22, 2026.')
+    expect(out).not.toMatch(/desk|served live|Arch/i)
+    expect(text(shell.run('neofetch'))).not.toContain('Uptime')
   })
 })
 

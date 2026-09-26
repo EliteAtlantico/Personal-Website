@@ -1,8 +1,8 @@
 // Runs after the prerender: a Brotli and a gzip copy of every text file in
-// dist/, made once here at the highest settings, so the desk's server
-// (server/site.ts) sends them as they are instead of compressing on every
-// request. Cloudflare's copy of the site skips them (.assetsignore): it
-// compresses by itself.
+// dist/, made once here at the highest settings, so the local server
+// (server/site.ts) sends pages compressed the way visitors get them, for the
+// perf harness. Cloudflare doesn't upload them (.assetsignore): it compresses
+// by itself.
 import { readdir, readFile, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { brotliCompressSync, constants, gzipSync } from 'node:zlib'

@@ -24,6 +24,8 @@ export interface Orbit {
   autoRotate: boolean
   /** A pointer is turning the globe. */
   readonly dragging: boolean
+  /** Still turning: a pointer is on it, or its momentum or a zoom hasn't died down. */
+  readonly moving: boolean
   /** One step: momentum, the slow turn (ms since the last step) and zoom. */
   update(ms?: number): void
 }
@@ -48,6 +50,9 @@ export function orbit(options: OrbitOptions): Orbit {
     autoRotate: false,
     get dragging() {
       return pointers.size > 0
+    },
+    get moving() {
+      return pointers.size > 0 || Math.abs(dTheta) > 1e-5 || Math.abs(dPhi) > 1e-5 || zoom !== 1
     },
     update(ms = FRAME) {
       // Where the camera is now (it may have been moved), as a distance and two angles.

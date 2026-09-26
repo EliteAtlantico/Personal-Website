@@ -10,9 +10,10 @@ import { layoutDesks } from './layout/masonry'
 import { layoutPortrait } from './layout/portrait'
 import type { Site } from './content/types'
 import { formatDate } from './render/html'
-import { desk, deskLine } from './desk'
 import { calm } from './signals'
 import { addNote } from './ui/note'
+import { arrange } from './layout/app'
+import { drift } from './layout/drift'
 
 /** `site` is the visitor's edition of it (src/signals), which the terminal lays its dashboard out from. */
 export async function enhance(page: HTMLElement, signal: AbortSignal, site: Site) {
@@ -20,17 +21,8 @@ export async function enhance(page: HTMLElement, signal: AbortSignal, site: Site
   for (const el of page.querySelectorAll<HTMLElement>('[data-today]')) el.textContent = formatDate(new Date().toISOString())
   // What personalizing noticed and changed, under the front page's masthead.
   if (page.classList.contains('page--front')) addNote(page, signal)
-  // Where the page came from: live from the desk, or Cloudflare's copy while it's asleep.
-  const colophon = page.querySelector('.colophon')
-  if (colophon) {
-    void desk().then((reading) => {
-      if (!reading || signal.aborted) return
-      const line = document.createElement('p')
-      line.className = 'colophon__desk'
-      line.textContent = deskLine(reading)
-      colophon.append(line)
-    })
-  }
+  // On a phone, the front page becomes the app: tabs over panels, before anything is laid out in them.
+  const app = page.classList.contains('page--front') ? arrange(page, signal) : null
   videoFacades(page)
   coverVideos(page, signal)
 
@@ -40,7 +32,7 @@ export async function enhance(page: HTMLElement, signal: AbortSignal, site: Site
     if (signal.aborted) return
     // Each layout is independent; one failing shouldn't take the others down. Their widths are
     // all read first, together (see observe.ts), instead of one forced layout per headline.
-    inWidthBatch(() => {
+    await inWidthBatch(() => {
       for (const layout of [layoutHeadlines, layoutDesks, layoutBio, layoutLead, layoutPortrait]) {
         try {
           layout(page, signal)
@@ -49,12 +41,14 @@ export async function enhance(page: HTMLElement, signal: AbortSignal, site: Site
         }
       }
     })
+    // The phone edition's text flows with the scroll, once its lines are laid out.
+    if (app && !signal.aborted) drift(page, signal, app)
   } else {
     // No pretext layout, so no typographic banner: show the photo itself.
     page.querySelector('.masthead__banner')?.classList.add('is-photo')
   }
 
-  // The front page's globe (three.js, a chunk of its own) loads as its tile nears the screen, on a
+  // The front page's globe (WebGL, a chunk of its own) loads as its tile nears the screen, on a
   // device that can take it and with pretext to measure its labels. Without it, the tile says in words
   // where the stories happened.
   const globe = page.querySelector<HTMLElement>('.page--front [data-globe]')
@@ -85,10 +79,24 @@ export async function enhance(page: HTMLElement, signal: AbortSignal, site: Site
       const { mountTerminal } = await import('./terminal')
       if (!signal.aborted) mountTerminal(terminal, signal, site)
     } catch (error) {
-      console.error(error)
+      if (!reloadForNewBuild(error)) console.error(error)
     }
   }
   page.querySelector('main')?.setAttribute('data-laid-out', '')
+}
+
+/**
+ * Cloudflare keeps only the newest build's files, so a page opened before a
+ * deploy asks for a chunk that's gone. The page loaded afresh names the new
+ * one: reload, once (a page that was just reloaded and still can't find it
+ * has another problem).
+ */
+function reloadForNewBuild(error: unknown) {
+  const gone = error instanceof TypeError && /dynamically imported module|Importing a module script failed/i.test(error.message)
+  const reloaded = (performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined)?.type === 'reload'
+  if (!gone || reloaded) return false
+  location.reload()
+  return true
 }
 
 /** Whether the device can take a WebGL globe: not on very little memory, two cores or less, or Save-Data. */

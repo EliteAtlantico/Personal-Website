@@ -68,12 +68,13 @@
   column-rule: 1px solid var(--rule);
   font: 400 1.0625rem/26px var(--font-text);
   hyphens: manual;
+  /* Columns the text overflows into (there are none when all's well) never show over the rail. */
+  overflow: hidden;
 }
 
 /* Trimmed to whole lines to balance the rail; the rest continues inside. */
 .jump__text.is-clipped {
   column-fill: auto;
-  overflow: hidden;
 }
 
 .jump__text p {
@@ -125,40 +126,98 @@
   font: 400 15px/21px var(--font-text);
 }
 
+.bio__chip {
+  /* The board's own colours, from its solder mask: the copper under it shows a little lighter, its edge darker. */
+  --board-edge: color-mix(in srgb, var(--chip-body) 55%, #000);
+  --board-copper: color-mix(in srgb, var(--chip-body) 68%, #b9f0cf);
+  --board-silk: color-mix(in srgb, var(--chip-ink) 70%, transparent);
+}
+
 .bio__art {
   position: absolute;
   top: 0;
   left: 0;
   overflow: visible;
+  /* It sits on the page, a few millimetres up. */
+  filter: drop-shadow(0 10px 14px rgba(0, 0, 0, 0.22));
+}
+
+:root[data-theme='dark'] .bio__art {
+  filter: drop-shadow(0 10px 16px rgba(0, 0, 0, 0.6));
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .bio__art {
+    filter: drop-shadow(0 10px 16px rgba(0, 0, 0, 0.6));
+  }
+}
+
+.bio__edge {
+  fill: var(--board-edge);
 }
 
 .bio__body {
   fill: var(--chip-body);
-  stroke: var(--rule);
+}
+
+.bio__sheen {
+  fill: url(#bio-sheen);
+  pointer-events: none;
+}
+
+.bio__pads {
+  fill: url(#bio-gold);
+}
+
+.bio__part {
+  fill: #2b2b2b;
+}
+
+/* Through the board, to the page behind: the half-holes on its edges and the mounting holes. */
+.bio__notches,
+.bio__hole {
+  fill: var(--paper);
+}
+
+.bio__ring {
+  fill: url(#bio-gold);
+}
+
+.bio__trace {
+  fill: none;
+  stroke: var(--board-copper);
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.bio__via {
+  fill: var(--chip-body);
+  stroke: var(--board-copper);
+  stroke-width: 1.6;
+}
+
+.bio__land {
+  fill: url(#bio-gold);
+}
+
+.bio__outline {
+  fill: none;
+  stroke: var(--board-silk);
   stroke-width: 1;
 }
 
-.bio__pins rect {
-  fill: var(--ink-3);
-}
-
-.bio__dot {
-  fill: var(--chip-ink);
-  opacity: 0.7;
-}
-
 .bio__silk {
-  fill: var(--chip-ink);
-  opacity: 0.45;
+  fill: var(--board-silk);
   font: 500 6.5px var(--font-mono);
   letter-spacing: 0.12em;
 }
 
-/* The words live inside the chip body; falling and knocked words are clipped to it. */
+/* The words live on the board; falling and knocked words are clipped to it. */
 .bio__words {
   position: absolute;
   overflow: hidden;
-  clip-path: polygon(14px 0, 100% 0, 100% 100%, 0 100%, 0 14px);
+  border-radius: 10px;
   color: var(--chip-ink);
   font: 400 15px/21px var(--font-text);
   cursor: crosshair;
@@ -176,6 +235,7 @@
   background: color-mix(in srgb, var(--chip-ink) 30%, transparent);
 }
 
+/* The die: a round part soldered to the board, with a silver rim. Picked up, it lifts. */
 .bio__die {
   position: absolute;
   top: 0;
@@ -183,11 +243,16 @@
   z-index: 2;
   display: grid;
   place-items: center;
-  border: 1.25px solid color-mix(in srgb, var(--chip-ink) 60%, transparent);
+  border: 2px solid #c8ccc9;
   border-radius: 50%;
-  color: var(--chip-ink);
+  background: radial-gradient(circle at 34% 28%, #45484a, #16181a 62%, #0c0d0e);
+  color: #eef1ef;
   font: 800 24px/1 var(--font-display);
   letter-spacing: -0.02em;
+  box-shadow:
+    0 2px 0 rgba(0, 0, 0, 0.45),
+    0 5px 10px rgba(0, 0, 0, 0.35),
+    inset 0 1px 1px rgba(255, 255, 255, 0.28);
   cursor: grab;
   touch-action: none;
   user-select: none;
@@ -199,18 +264,24 @@
   content: '';
   position: absolute;
   inset: 5px;
-  border: 1px dashed color-mix(in srgb, var(--chip-ink) 35%, transparent);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 50%;
 }
 
-.bio__die:hover,
-.bio__die.is-dragging {
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--chip-ink) 12%, transparent);
+.bio__die:hover {
+  box-shadow:
+    0 2px 0 rgba(0, 0, 0, 0.45),
+    0 8px 14px rgba(0, 0, 0, 0.4),
+    inset 0 1px 1px rgba(255, 255, 255, 0.28);
 }
 
 .bio__die.is-dragging {
   cursor: grabbing;
-  scale: 1.05;
+  scale: 1.08;
+  box-shadow:
+    0 4px 0 rgba(0, 0, 0, 0.35),
+    0 18px 26px rgba(0, 0, 0, 0.45),
+    inset 0 1px 1px rgba(255, 255, 255, 0.3);
 }
 
 .bio__die:focus-visible {

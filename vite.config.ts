@@ -5,9 +5,8 @@ import path from 'node:path'
 import { feature } from 'topojson-client'
 import type { GeometryCollection, Topology } from 'topojson-specification'
 import { defineConfig, type Plugin } from 'vite'
-import { CONTENT_DIR, MEDIA_DIR, loadSite } from './src/content/load'
-import { deskNow } from './server/site'
-import { DOTS, landBits, type Polygons } from './src/globe/land'
+import { CONTENT_DIR, MEDIA_DIR, loadSite } from './src/content/load.ts'
+import { DOTS, landBits, type Polygons } from './src/globe/land.ts'
 
 const MIME: Record<string, string> = {
   '.jpg': 'image/jpeg',
@@ -62,11 +61,6 @@ function content(): Plugin {
         res.setHeader('Content-Type', 'application/json')
         res.end('{}')
       })
-      // How the desk is doing (server/site.ts), from this computer while developing.
-      server.middlewares.use('/api/desk', async (_req, res) => {
-        res.setHeader('Content-Type', 'application/json')
-        res.end(JSON.stringify(await deskNow()))
-      })
 
       // Photos and videos straight from content/media/ (the build makes resized copies instead).
       server.middlewares.use('/media', (req, res, next) => {
@@ -85,10 +79,11 @@ function content(): Plugin {
         try {
           const template = await server.transformIndexHtml(url, await readFile(path.resolve('index.html'), 'utf8'))
           const { renderPage, injectPage } = (await server.ssrLoadModule('/src/render/document.ts')) as typeof import('./src/render/document')
-          const page = renderPage(await loadSite({ includeDrafts: true }), pathname)
+          const site = await loadSite({ includeDrafts: true })
+          const page = renderPage(site, pathname)
           // In dev the CSS normally arrives with the JavaScript, a moment after the first paint.
           // Link it as well, so the first paint is styled like production (main.ts drops the link).
-          const html = injectPage(template, page).replace('</head>', '  <link rel="stylesheet" href="/src/styles/main.css" data-dev-css>\n  </head>')
+          const html = injectPage(template, page, site.config).replace('</head>', '  <link rel="stylesheet" href="/src/styles/main.css" data-dev-css>\n  </head>')
           res.statusCode = page.status
           res.setHeader('Content-Type', 'text/html; charset=utf-8')
           res.end(html)

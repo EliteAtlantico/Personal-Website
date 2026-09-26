@@ -6,7 +6,7 @@ import './styles/main.css'
 import site from 'virtual:content'
 import type { Site } from './content/types'
 import { fontsReady } from './layout/fonts'
-import { renderPage } from './render/document'
+import { renderPage, setThemeColors } from './render/document'
 import { normalizePath } from './render/paths'
 import { startRouter } from './router'
 import { openedAsTerminal, personalize } from './signals'
@@ -56,5 +56,6 @@ function replace(old: HTMLElement, path: string, edition: Site) {
   const page = template.content.firstElementChild as HTMLElement
   old.replaceWith(page)
   document.title = next.title
+  setThemeColors(next.kind)
   return page
 }

@@ -1,0 +1,115 @@
+/* ---------- The phone edition (layout/app.ts): section tabs over a pager of panels ---------- */
+
+.tabs {
+  display: none;
+}
+
+@media (max-width: 880px) {
+  /* Stuck to the top of the screen, like a news app's sections. Without JavaScript, links down the page. */
+  .tabs {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    display: flex;
+    overflow-x: auto;
+    padding: 0 calc(var(--gutter) - 10px);
+    border-bottom: 1px solid var(--rule-strong);
+    background: var(--paper);
+    scrollbar-width: none;
+    /* More tabs off to the right: the strip fades out there. */
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+    mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+  }
+
+  .tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .tabs__tab {
+    flex: none;
+    padding: 14px 10px 11px;
+    border-bottom: 2px solid transparent;
+    color: var(--ink-3);
+    font: 500 12px/1 var(--font-mono);
+    letter-spacing: 0.12em;
+    text-decoration: none;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  .tabs__tab[aria-selected='true'] {
+    border-bottom-color: var(--accent);
+    color: var(--ink);
+  }
+
+  .tabs__tab:last-child {
+    margin-right: 18px;
+  }
+
+  /* What's scrolled to (a focused link, say) lands clear of the tabs stuck over the top. */
+  html:has(.front.is-app) {
+    scroll-padding-top: 56px;
+  }
+
+  .front.is-app {
+    display: block;
+    max-width: none;
+    padding: 0;
+  }
+
+  /* The panels side by side, one screen wide each; a swipe snaps to the next. */
+  .pager {
+    display: flex;
+    align-items: flex-start;
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+  }
+
+  .pager::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Room at the foot for the stories trailing the scroll (layout/drift.ts), which never trail up past their tops. */
+  .pager__panel {
+    flex: 0 0 100%;
+    min-width: 0;
+    padding: 0 var(--gutter) 40px;
+    scroll-snap-align: start;
+    scroll-snap-stop: always;
+  }
+
+  .front.is-app .desk__stories {
+    padding-bottom: 40px;
+    margin-bottom: -40px;
+  }
+
+  .pager__panel > .desk:first-child {
+    margin-top: 20px;
+  }
+
+  #panel-about {
+    padding-top: 24px;
+  }
+
+  .pager__about {
+    margin: 4px 0 8px;
+    font: italic 500 1rem/1.4 var(--font-text);
+  }
+
+  .pager__about a {
+    color: var(--accent);
+  }
+}
+
+/* A summary broken into its lines (layout/drift.ts), so each can trail the scroll on its own. */
+.drift-line {
+  display: block;
+  white-space: nowrap;
+}
+
+.drift-line.is-hyphen::after {
+  content: '-';
+}

@@ -8,7 +8,7 @@ import { imageSize } from 'image-size'
 import { Marked, type Token } from 'marked'
 import sharp from 'sharp'
 import { parse as parseYaml } from 'yaml'
-import { findSkyline } from '../layout/skyline'
+import { findSkyline } from '../layout/skyline.ts'
 import {
   SECTIONS,
   type Audience,
@@ -21,7 +21,7 @@ import {
   type Section,
   type Site,
   type SiteConfig,
-} from './types'
+} from './types.ts'
 
 export const CONTENT_DIR = path.resolve(process.cwd(), 'content')
 export const MEDIA_DIR = path.join(CONTENT_DIR, 'media')

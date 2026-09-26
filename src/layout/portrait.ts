@@ -1,5 +1,6 @@
-// The typographic portrait: the masthead banner photo, redrawn out of the words
-// of every story on the front page, flowed by pretext in justified rows.
+// The typographic portrait: the masthead banner photo, redrawn out of words
+// (its own, from site.json, or else every story on the front page), flowed by
+// pretext in justified rows.
 //  - The strip shows a slice of the photo (site.json banner.band), squeezed
 //    vertically so a whole skyline fits in a thin banner.
 //  - mode "silhouette": the city's skyline is found in the photo (./skyline).
@@ -10,7 +11,9 @@
 //    heavy accent-coloured letters. On load it builds itself last, upward from
 //    the ground.
 //  - Letters swarm in at the same pace as the bio's snowfall (./pace); the
-//    cursor pushes them aside.
+//    cursor pushes them aside. They fly in a word at a time, each word copied
+//    whole from the banner drawn as it will land, so a swarm of tens of
+//    thousands of tiny letters stays cheap enough to draw every frame.
 // The <img> stays in the page for its alt text and for visitors without
 // JavaScript; the canvas on top is decoration.
 import { layoutNextLine, type LayoutCursor } from '@chenglou/pretext'
@@ -62,6 +65,17 @@ interface Glyph {
   ox: number
   oy: number
   /** Lives in the landmark's column: it arrives in the finale, and only these letters are drawn in its colour. */
+  tower: boolean
+}
+
+/** A word (or the part of one on either side of the landmark's column): its letters fly in together. */
+interface Word {
+  /** Its first and last letters in `glyphs`. */
+  first: number
+  last: number
+  hx: number
+  hy: number
+  w: number
   tower: boolean
 }
 
@@ -124,8 +138,8 @@ function samplePhoto(img: HTMLImageElement, silhouette: boolean, band: [number, 
 
 /** Draws the portrait; false if there's nothing to draw it with. */
 function build(page: HTMLElement, figure: HTMLElement, img: HTMLImageElement, signal: AbortSignal): boolean {
-  // The words of the stories on this page, in page order.
-  const text = [...page.querySelectorAll<HTMLElement>('.tile__headline, .tile__dek, .bio__text')]
+  // Its own words if it has some (content/site.json), else the words of the stories on this page, in page order.
+  const text = figure.dataset.words?.replace(/\s+/g, ' ').trim() || [...page.querySelectorAll<HTMLElement>('.tile__headline, .tile__dek, .bio__text')]
     .map((el) => (el.dataset.text ?? el.textContent ?? '').replaceAll(SOFT_HYPHEN, '').replace(/\s+/g, ' ').trim())
     .filter(Boolean)
     .join('  ·  ')
@@ -152,6 +166,7 @@ function build(page: HTMLElement, figure: HTMLElement, img: HTMLImageElement, si
   const brightness = 'brightness' in photo ? photo.brightness : () => 0.5
 
   let glyphs: Glyph[] = []
+  let words: Word[] = []
   let buckets: Glyph[][] = []
   let size = { w: 0, h: 0 }
   let font: FontSpec = { family: FAMILY.text, weight: 400, size: 10 }
@@ -173,6 +188,12 @@ function build(page: HTMLElement, figure: HTMLElement, img: HTMLImageElement, si
   /** Device pixels per CSS pixel, and the letter stamps for this size and these colours. */
   let dpr = 1
   let sheets = new Map<string, Sheet>()
+  /** The banner as it will land, drawn once in each of its looks, for the words to be copied from as they fly. */
+  let plates = new Map<string, HTMLCanvasElement>()
+  const clearPlates = () => {
+    for (const plate of plates.values()) plate.width = plate.height = 0
+    plates = new Map()
+  }
 
   // Photo fractions → strip pixels (the band is squeezed to the strip's height).
   const stripY = (fy: number) => ((fy - bandTop) / (bandBottom - bandTop)) * size.h
@@ -189,12 +210,13 @@ function build(page: HTMLElement, figure: HTMLElement, img: HTMLImageElement, si
     dpr = Math.min(2, window.devicePixelRatio || 1)
     for (const { canvas: stamps } of sheets.values()) stamps.width = stamps.height = 0
     sheets = new Map()
+    clearPlates()
     canvas.width = Math.round(w * dpr)
     canvas.height = Math.round(h * dpr)
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
 
-    // Small enough for at least ~9 rows, however thin the strip is.
-    font = { family: FAMILY.text, weight: 400, size: Math.max(5, Math.min(10, w / 150, h / 9 / 1.12)) }
+    // Small enough for at least ~18 rows, however thin the strip is.
+    font = { family: FAMILY.text, weight: 400, size: Math.max(2.5, Math.min(5, w / 300, h / 18 / 1.12)) }
     const lineHeight = font.size * 1.12
     const rows = Math.floor(h / lineHeight)
     const top = (h - rows * lineHeight) / 2
@@ -244,6 +266,16 @@ function build(page: HTMLElement, figure: HTMLElement, img: HTMLImageElement, si
       span = { left: Math.min(...xs), right: Math.max(...xs) }
     }
     for (const g of glyphs) g.tower = !!landmark && inSpan(g, g.hx)
+    // The words: runs of letters with no space between, on one row and one side of the landmark's edge.
+    words = []
+    glyphs.forEach((g, i) => {
+      const word = words.at(-1)
+      const last = glyphs[i - 1]
+      if (word && last && last.hy === g.hy && last.tower === g.tower && Math.abs(last.hx + last.w - g.hx) < 0.01) {
+        word.last = i
+        word.w = g.hx + g.w - word.hx
+      } else words.push({ first: i, last: i, hx: g.hx, hy: g.hy, w: g.w, tower: g.tower })
+    })
 
     roofs = city = null
     if (skyline) {
@@ -334,7 +366,7 @@ function build(page: HTMLElement, figure: HTMLElement, img: HTMLImageElement, si
     sheets.set(key, made)
     return made
   }
-  const stamp = (from: Sheet, ch: string, x: number, y: number) => {
+  const stamp = (from: Sheet, ch: string, x: number, y: number, to: CanvasRenderingContext2D = ctx) => {
     const first = from.at.get(ch)
     if (first === undefined) return
     const { cell, inset, columns } = from
@@ -342,7 +374,84 @@ function build(page: HTMLElement, figure: HTMLElement, img: HTMLImageElement, si
     const quarters = Math.round(x * dpr * PHASES)
     const column = Math.floor(quarters / PHASES)
     const n = first + (quarters - column * PHASES)
-    ctx.drawImage(from.canvas, (n % columns) * cell, Math.floor(n / columns) * cell, cell, cell, (column - inset) / dpr, (Math.round(y * dpr) - inset) / dpr, cell / dpr, cell / dpr)
+    to.drawImage(from.canvas, (n % columns) * cell, Math.floor(n / columns) * cell, cell, cell, (column - inset) / dpr, (Math.round(y * dpr) - inset) / dpr, cell / dpr, cell / dpr)
+  }
+
+  /**
+   * A plate: every letter at home in one look ("sky", "dense", "tower", or "tone", whose letters
+   * each have their own weight and shade), on a canvas the size of the banner.
+   */
+  const plate = (look: string) => {
+    const known = plates.get(look)
+    if (known) return known
+    const made = document.createElement('canvas')
+    made.width = canvas.width
+    made.height = canvas.height
+    const pctx = made.getContext('2d')!
+    pctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+    if (look === 'tone') {
+      for (let level = 0; level <= LEVELS; level++) {
+        const tone = level / LEVELS
+        const shade = sheet(Math.round(220 + 580 * tone), ink)
+        pctx.globalAlpha = 0.07 + 0.93 * tone
+        for (const g of buckets[level]!) stamp(shade, g.ch, g.hx, g.hy, pctx)
+      }
+    } else {
+      const from = look === 'sky' ? sheet(300, ink) : look === 'dense' ? sheet(650, ink) : sheet(800, accent)
+      for (const g of glyphs) if (look !== 'tower' || g.tower) stamp(from, g.ch, g.hx, g.hy, pctx)
+    }
+    plates.set(look, made)
+    return made
+  }
+  /** A word copied from a plate to where it is now (moved by whole device pixels, so its letters look just as they will). */
+  const copy = (from: HTMLCanvasElement, word: Word, x: number, y: number) => {
+    const sx = Math.max(0, Math.floor(word.hx * dpr))
+    const sy = Math.max(0, Math.floor(word.hy * dpr) - 1)
+    const sw = Math.min(from.width, Math.ceil((word.hx + word.w) * dpr)) - sx
+    const sh = Math.min(from.height, Math.ceil((word.hy + font.size * 1.12) * dpr)) - sy
+    if (sw <= 0 || sh <= 0) return
+    const mx = Math.round((x - word.hx) * dpr)
+    const my = Math.round((y - word.hy) * dpr)
+    ctx.drawImage(from, sx, sy, sw, sh, (sx + mx) / dpr, (sy + my) / dpr, sw / dpr, sh / dpr)
+  }
+
+  /** The swarm, a word at a time: each in the look for where it is now, like the letters below. */
+  const flying = (finale: boolean) => {
+    const at = (word: Word) => {
+      const g = glyphs[word.first]!
+      return [word.hx + g.dx, word.hy + g.dy] as const
+    }
+    if (roofs && city) {
+      const sky = plate('sky')
+      ctx.globalAlpha = dark.matches ? 0.16 : 0.12
+      for (const word of words) {
+        const [x, y] = at(word)
+        if (y < roofBottom(roofs, x, x + word.w)) copy(sky, word, x, y)
+      }
+      ctx.save()
+      ctx.clip(city)
+      if (aroundLandmark && finale) ctx.clip(aroundLandmark, 'evenodd')
+      const dense = plate('dense')
+      ctx.globalAlpha = 0.92
+      for (const word of words) {
+        const [x, y] = at(word)
+        if (y + font.size > roofTop(roofs, x, x + word.w)) copy(dense, word, x, y)
+      }
+      ctx.restore()
+    } else {
+      const toned = plate('tone')
+      ctx.globalAlpha = 1
+      for (const word of words) copy(toned, word, ...at(word))
+    }
+    if (landmark && finale) {
+      ctx.save()
+      ctx.clip(landmark)
+      const heavy = plate('tower')
+      ctx.globalAlpha = 1
+      for (const word of words) if (word.tower) copy(heavy, word, ...at(word))
+      ctx.restore()
+    }
+    ctx.globalAlpha = 1
   }
 
   /** Draws the letters (those touching `area`, for a partial redraw, or all of them). */
@@ -404,7 +513,8 @@ function build(page: HTMLElement, figure: HTMLElement, img: HTMLImageElement, si
     const finale = !introStart || now - introStart >= finaleAt
     if (!area) {
       ctx.clearRect(0, 0, size.w, size.h)
-      letters(finale, null)
+      if (introStart && now - introStart < introEnd) flying(finale)
+      else letters(finale, null)
       return
     }
     // To whole device pixels, so the edge of the redrawn patch doesn't show.
@@ -472,9 +582,12 @@ function build(page: HTMLElement, figure: HTMLElement, img: HTMLImageElement, si
         include(g, g.dx, g.dy)
       }
     }
-    // The finale changes how the landmark's letters look everywhere, so that frame is drawn whole.
+    // The finale changes how the landmark's letters look everywhere, so that frame is drawn whole; so is
+    // the first after the swarm, letter by letter now (and the plates it flew from are let go).
     const finale = !introStart || elapsed >= finaleAt
-    const whole = intro || finale !== finaleShown
+    const landed = !intro && plates.size > 0
+    if (landed) clearPlates()
+    const whole = intro || landed || finale !== finaleShown
     finaleShown = finale
     const patch = moved as Area | null
     if (whole || (patch && (patch.right - patch.left) * (patch.bottom - patch.top) > size.w * size.h * 0.5)) draw(now)
@@ -491,24 +604,24 @@ function build(page: HTMLElement, figure: HTMLElement, img: HTMLImageElement, si
     introStart = performance.now()
     introEnd = 0
     finaleAt = Infinity
-    for (const g of glyphs) {
-      if (g.tower) {
-        g.ox = (Math.random() - 0.5) * 30
-        g.oy = size.h * (1.2 + Math.random() * 0.6)
-        g.delay = intro(1800 + (1 - g.hy / size.h) * 1400 + Math.random() * 300)
-        g.dur = intro(1200 + Math.random() * 500)
-        finaleAt = Math.min(finaleAt, g.delay)
+    for (const word of words) {
+      const flight = { ox: 0, oy: 0, delay: 0, dur: 0 }
+      if (word.tower) {
+        flight.ox = (Math.random() - 0.5) * 30
+        flight.oy = size.h * (1.2 + Math.random() * 0.6)
+        flight.delay = intro(1800 + (1 - word.hy / size.h) * 1400 + Math.random() * 300)
+        flight.dur = intro(1200 + Math.random() * 500)
+        finaleAt = Math.min(finaleAt, flight.delay)
       } else {
         const angle = Math.random() * Math.PI * 2
         const dist = 120 + Math.random() * 380
-        g.ox = Math.cos(angle) * dist
-        g.oy = Math.sin(angle) * dist * 0.45
-        g.delay = intro((g.hx / size.w) * 900 + Math.random() * 500)
-        g.dur = intro(1800 + Math.random() * 1500)
+        flight.ox = Math.cos(angle) * dist
+        flight.oy = Math.sin(angle) * dist * 0.45
+        flight.delay = intro((word.hx / size.w) * 900 + Math.random() * 500)
+        flight.dur = intro(1800 + Math.random() * 1500)
       }
-      g.dx = g.ox
-      g.dy = g.oy
-      introEnd = Math.max(introEnd, g.delay + g.dur)
+      for (let i = word.first; i <= word.last; i++) Object.assign(glyphs[i]!, flight, { dx: flight.ox, dy: flight.oy })
+      introEnd = Math.max(introEnd, flight.delay + flight.dur)
     }
     if (finaleAt === Infinity) finaleAt = 0
     draw(introStart)

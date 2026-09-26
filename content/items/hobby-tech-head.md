@@ -15,7 +15,7 @@ draft: false
 Arch Linux on Hyprland (83 keybinds and counting), with Waybar, Ghostty, Starship and JetBrains Mono. I'm always tweaking it, partly for productivity and partly because it looks cooler.
 
 ## The home server
-The same machine stays on around the clock, and it's about to host this website. Keeping it running is how I learned to maintain a server:
+The same machine stays on around the clock. Keeping it running is how I learned to maintain a server:
 
 - **Tailscale** connects all my devices to it, wherever I am.
 - **Local AI.** It runs local LLMs with llama.cpp, vLLM and SGLang, and Hermes Agent is my go-to harness for local AI.

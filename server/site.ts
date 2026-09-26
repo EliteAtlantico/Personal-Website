@@ -1,25 +1,21 @@
-// The site, as the desk (Khalil's Arch desktop) serves it. Cloudflare's tunnel
-// is the only way in: the server listens on localhost, so nothing on the
-// machine is open to the internet.
+// The built site served here, much as Cloudflare serves it (wrangler.jsonc):
+// for the perf harness (perf/) and the browser attacks (security/), which
+// need dist/ over HTTP with its real headers, and compressed the way a
+// visitor gets it.
 //
 // It serves the prerendered site in dist/: clean URLs (/projects/butler-bot is
 // dist/projects/butler-bot.html), hashed assets cached for a year and pages
 // checked every time, Brotli or gzip made at build time when the browser takes
-// them, byte ranges (for video), and the 404 page. Plus /api/desk: how the desk
-// is doing, so the site can say it's being served live.
+// them, byte ranges (for video), and the 404 page.
 //
-// dist/ is read once, when the server starts (deploy.sh restarts it with each
-// new build): every file small enough is kept in memory with its compressed
-// copies, so a request is a lookup and a write, with no disk in between. Only
-// what's in dist/ can ever be served.
-//
-// Nothing about visitors is logged: no addresses, no paths.
+// dist/ is read once, when the server starts: every file small enough is kept
+// in memory with its compressed copies, so a request is a lookup and a write,
+// with no disk in between. Only what's in dist/ can ever be served.
 import { createReadStream } from 'node:fs'
 import { readdir, readFile, stat } from 'node:fs/promises'
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import os from 'node:os'
 import path from 'node:path'
-import { SECURITY } from './headers'
+import { SECURITY, securityFor } from './headers'
 
 const TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -27,6 +23,7 @@ const TYPES: Record<string, string> = {
   '.js': 'text/javascript; charset=utf-8',
   '.mjs': 'text/javascript; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
+  '.webmanifest': 'application/manifest+json; charset=utf-8',
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
@@ -46,37 +43,19 @@ const TYPES: Record<string, string> = {
 
 export { SECURITY } from './headers'
 
-export interface Desk {
-  live: true
-  /** Who's serving: "my Arch desktop" (DESK_NAME in the service file). */
-  name: string
-  /** Seconds since it booted. */
-  uptime: number
-  /** Load average over 1, 5 and 15 minutes. */
-  load: number[]
-  /** The CPU package's temperature in °C, if there's a sensor for it. */
-  cpu: number | null
-  /** "Linux", and its kernel's version. */
-  system: string
-  kernel: string
-  cores: number
-}
-
 export interface Options {
   /** The built site (dist/). */
   dist: string
-  /** How the desk is doing (tests pass their own). */
-  desk?: () => Promise<Desk>
 }
 
-export function site({ dist, desk = deskNow }: Options) {
+export function site({ dist }: Options) {
   const files = catalog(path.resolve(dist))
   return async (req: IncomingMessage, res: ServerResponse) => {
     try {
-      await respond(await files, desk, req, res)
+      await respond(await files, req, res)
     } catch (error) {
       console.error(error)
-      if (!res.headersSent) send(res, 500, { 'content-type': 'text/plain; charset=utf-8' }, 'Something broke on the desk.')
+      if (!res.headersSent) send(res, 500, { 'content-type': 'text/plain; charset=utf-8' }, 'Something broke.')
       else res.destroy()
     }
   }
@@ -94,6 +73,8 @@ interface Copy {
 interface Entry {
   type: string
   cache: string
+  /** Its security headers (server/headers.ts). */
+  security: Record<string, string>
   plain: Copy
   br?: Copy
   gzip?: Copy
@@ -121,8 +102,9 @@ async function catalog(root: string): Promise<Map<string, Entry>> {
         if (!entry.name.startsWith('.')) await walk(file)
         continue
       }
-      // Not the compressed copies (they're sent in place of their files), hidden files, or source maps.
-      if (!entry.isFile() || /\.(br|gz|map)$/.test(entry.name) || entry.name.startsWith('.')) continue
+      // Not the compressed copies (they're sent in place of their files), hidden files, source maps,
+      // or Cloudflare's rules for its headers (_headers).
+      if (!entry.isFile() || /\.(br|gz|map)$/.test(entry.name) || entry.name.startsWith('.') || entry.name === '_headers') continue
       const type = TYPES[path.extname(file).toLowerCase()] ?? 'application/octet-stream'
       const key = `/${path.relative(root, file).split(path.sep).join('/')}`
       // Vite names what's in assets/ by its contents, so those can be kept a year; pages are checked every time.
@@ -132,25 +114,21 @@ async function catalog(root: string): Promise<Map<string, Entry>> {
         stat(`${file}.br`).then(() => copy(`${file}.br`, 'br'), () => undefined),
         stat(`${file}.gz`).then(() => copy(`${file}.gz`, 'gzip'), () => undefined),
       ])
-      entries.set(key, { type, cache, plain, br, gzip })
+      entries.set(key, { type, cache, security: securityFor(key), plain, br, gzip })
     }
   }
   await walk(root)
   return entries
 }
 
-async function respond(files: Map<string, Entry>, desk: () => Promise<Desk>, req: IncomingMessage, res: ServerResponse) {
-  const url = new URL(req.url ?? '/', 'http://desk')
+async function respond(files: Map<string, Entry>, req: IncomingMessage, res: ServerResponse) {
+  const url = new URL(req.url ?? '/', 'http://localhost')
   const head = req.method === 'HEAD'
   // Node takes a request line without a version as HTTP/0.9, and reads on; nothing real speaks that.
   if (req.httpVersionMajor !== 1) return send(res, 505, { 'content-type': 'text/plain; charset=utf-8', connection: 'close' }, 'HTTP/1.1 only.')
   if (req.method !== 'GET' && !head) return send(res, 405, { allow: 'GET, HEAD', 'content-type': 'text/plain; charset=utf-8' }, 'Only GET and HEAD.')
 
-  if (url.pathname === '/api/desk') {
-    return send(res, 200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }, head ? '' : JSON.stringify(await desk()))
-  }
-  // Only Cloudflare can see where a visitor is (edge/worker.ts answers this before
-  // the desk is asked); reached directly, the desk knows nothing, and says so.
+  // Only Cloudflare can see where a visitor is (edge/worker.ts); here, nothing knows, and says so.
   if (url.pathname === '/api/visitor') {
     return send(res, 200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'private, no-store' }, head ? '' : '{}')
   }
@@ -210,12 +188,12 @@ function serveFile(req: IncomingMessage, res: ServerResponse, entry: Entry, stat
     const size = copy.size
     const [start, end] = range[1] ? [Number(range[1]), range[2] ? Math.min(Number(range[2]), size - 1) : size - 1] : [Math.max(0, size - Number(range[2])), size - 1]
     if (start > end || start >= size) return send(res, 416, { ...headers, 'content-range': `bytes */${size}` }, '')
-    res.writeHead(206, { ...SECURITY, ...headers, 'content-range': `bytes ${start}-${end}/${size}`, 'content-length': String(end - start + 1) })
+    res.writeHead(206, { ...entry.security, ...headers, 'content-range': `bytes ${start}-${end}/${size}`, 'content-length': String(end - start + 1) })
     if (req.method === 'HEAD') return res.end()
     if (copy.body) return res.end(copy.body.subarray(start, end + 1))
     return createReadStream(copy.file, { start, end }).pipe(res)
   }
-  res.writeHead(status, { ...SECURITY, ...headers, 'content-length': String(copy.size) })
+  res.writeHead(status, { ...entry.security, ...headers, 'content-length': String(copy.size) })
   if (req.method === 'HEAD') return res.end()
   if (copy.body) return res.end(copy.body)
   createReadStream(copy.file).pipe(res)
@@ -224,50 +202,4 @@ function serveFile(req: IncomingMessage, res: ServerResponse, entry: Entry, stat
 function send(res: ServerResponse, status: number, headers: Record<string, string>, body: string) {
   res.writeHead(status, { ...SECURITY, ...headers, 'content-length': String(Buffer.byteLength(body)) })
   res.end(body)
-}
-
-// --- How the desk is doing ---
-
-let last: { at: number; desk: Promise<Desk> } | null = null
-
-/** The desk's numbers, read at most every 10 seconds however often they're asked for. */
-export function deskNow(): Promise<Desk> {
-  const now = Date.now()
-  if (!last || now - last.at > 10_000) {
-    last = {
-      at: now,
-      desk: cpuTemperature().then((cpu) => ({
-        live: true as const,
-        name: process.env.DESK_NAME || 'this computer',
-        uptime: Math.round(os.uptime()),
-        load: os.loadavg().map((n) => Math.round(n * 100) / 100),
-        cpu,
-        system: os.type(),
-        // The kernel's version, not its exact build: that would tell anyone which fixes the desk has.
-        kernel: os.release().split(/[.-]/).slice(0, 2).join('.'),
-        cores: os.cpus().length,
-      })),
-    }
-  }
-  return last.desk
-}
-
-/** The CPU package's sensor: coretemp's "Package id 0" (Intel), or k10temp's Tctl (AMD). */
-async function cpuTemperature(): Promise<number | null> {
-  const base = '/sys/class/hwmon'
-  const monitors = await readdir(base).catch(() => [])
-  for (const monitor of monitors) {
-    const dir = path.join(base, monitor)
-    const name = (await readFile(path.join(dir, 'name'), 'utf8').catch(() => '')).trim()
-    if (!['coretemp', 'k10temp', 'zenpower'].includes(name)) continue
-    for (const file of await readdir(dir).catch(() => [])) {
-      const match = /^temp(\d+)_label$/.exec(file)
-      if (!match) continue
-      const label = (await readFile(path.join(dir, file), 'utf8').catch(() => '')).trim()
-      if (!/^(Package id 0|Tctl|Tdie)$/.test(label)) continue
-      const value = Number(await readFile(path.join(dir, `temp${match[1]}_input`), 'utf8').catch(() => 'NaN'))
-      if (Number.isFinite(value)) return Math.round(value / 1000)
-    }
-  }
-  return null
 }

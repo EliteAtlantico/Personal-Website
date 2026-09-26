@@ -6,7 +6,6 @@
 // also runs in tests.
 import { relatedItems } from '../content/related'
 import type { Item, Site } from '../content/types'
-import { since, type Reading } from '../desk'
 import { formatShortDate } from '../render/html'
 import type { Signals } from '../signals/collect'
 import type { Decision } from '../signals/decide'
@@ -41,8 +40,6 @@ export interface Env {
   visitor(full?: boolean): Visitor | undefined
   /** Turns personalizing on or off, remembered in their browser. */
   personalize(on: boolean): void
-  /** The desk serving the site, if it's been heard from (src/desk.ts). */
-  desk(): Reading | null
 }
 
 /** What the site knows about the visitor, all of it read in their browser (src/signals). */
@@ -201,8 +198,6 @@ export function createShell(site: Site, env: Env): Shell {
     })
 
   const neofetch = (): Line[] => {
-    const reading = env.desk()
-    const live = reading?.desk.live ? (reading as Reading & { desk: { live: true; uptime: number } }) : null
     const bySlug = (slug: string) => site.items.find((item) => item.slug === slug)
     const study = bySlug('uoft')
     const lab = bySlug('mersivity')
@@ -219,7 +214,6 @@ export function createShell(site: Site, env: Env): Shell {
       lab?.role && field('Research', lab.role),
       work.length > 0 && field('Work', work.join(' · ')),
       rig && rig.stack.length > 1 && field('Setup', rig.stack.slice(0, 2).join(' + ').replace('Arch Linux', 'Arch Linux (btw)')),
-      live && field('Uptime', `${since(live.desk.uptime + (env.now().getTime() - live.at) / 1000)} (it's serving you this)`),
       field('Stack', topStack(site.items, 6).join(', ')),
       field('Stories', [`${stories}  `, runSeg('ls', 'ls to browse')]),
       blank(),
@@ -436,24 +430,11 @@ export function createShell(site: Site, env: Env): Shell {
     },
     {
       name: 'uptime',
-      summary: 'how long the desk serving this has been up',
+      summary: 'how long this version of the site has been up',
       run: () => {
         const now = env.now()
-        const reading = env.desk()
-        if (reading?.desk.live) {
-          const { desk } = reading
-          const seconds = desk.uptime + (now.getTime() - reading.at) / 1000
-          const cpu = desk.cpu === null ? '' : `, CPU at ${desk.cpu}°C`
-          return [
-            line(` ${clock(now)} up ${upFor(seconds)},  1 user,  load average: ${desk.load.map((n) => n.toFixed(2)).join(', ')}`),
-            line(seg(`Served live from ${desk.name} (${desk.system} ${desk.kernel}, ${desk.cores} cores${cpu}).`, 'dim')),
-          ]
-        }
-        if (reading) return [line(seg(`My desk is asleep, so this is the copy Cloudflare keeps. It was built ${shortDate(site.builtAt)}.`, 'dim'))]
-        const built = new Date(site.builtAt)
-        const minutes = Math.max(1, Math.round((now.getTime() - built.getTime()) / 60000))
-        const up = minutes >= 1440 ? `${Math.floor(minutes / 1440)} day${minutes >= 2880 ? 's' : ''}` : minutes >= 60 ? `${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, '0')}` : `${minutes} min`
-        return [line(` ${clock(now)} up ${up},  1 user,  load average: 0.00, 0.00, 0.00`), line(seg(`This copy of the site was built ${shortDate(site.builtAt)}.`, 'dim'))]
+        const seconds = Math.max(60, (now.getTime() - new Date(site.builtAt).getTime()) / 1000)
+        return [line(` ${clock(now)} up ${upFor(seconds)},  1 user,  load average: 0.00, 0.00, 0.00`), line(seg(`This version of the site was built ${shortDate(site.builtAt)}.`, 'dim'))]
       },
     },
     {

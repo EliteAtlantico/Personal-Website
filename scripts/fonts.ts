@@ -11,11 +11,10 @@
 // change): `bun run fonts`. It writes src/fonts/*.woff2 and
 // src/styles/fonts.css; don't edit those by hand. It needs Python's fontTools
 // (pip install fonttools); Brotli, for WOFF2, it borrows from Bun.
-import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
-import os from 'node:os'
 import path from 'node:path'
+import { python } from './fonttools'
 
 /** The fontsource stylesheets the site used to import (src/main.ts). */
 const SHEETS = [
@@ -113,31 +112,8 @@ function range(set: Set<number>) {
   return parts.join(',')
 }
 
-// --- fontTools, with Bun's Brotli if Python has none ---
-const shim = path.join(os.tmpdir(), 'kc-fonts-brotli')
-mkdirSync(shim, { recursive: true })
-writeFileSync(
-  path.join(shim, 'brotli.py'),
-  `# Brotli for fontTools' WOFF2, from Bun (written by scripts/fonts.ts).
-import subprocess
-MODE_GENERIC, MODE_TEXT, MODE_FONT = 0, 1, 2
-def _bun(script, data):
-    return subprocess.run([${JSON.stringify(process.execPath)}, '-e', script], input=data, capture_output=True, check=True).stdout
-def decompress(data):
-    return _bun("process.stdout.write(require('node:zlib').brotliDecompressSync(require('fs').readFileSync(0)))", data)
-def compress(data, mode=0, quality=11, lgwin=22, lgblock=0):
-    return _bun("const z=require('node:zlib'),c=z.constants;process.stdout.write(z.brotliCompressSync(require('fs').readFileSync(0),{params:{[c.BROTLI_PARAM_MODE]:%d,[c.BROTLI_PARAM_QUALITY]:%d,[c.BROTLI_PARAM_LGWIN]:%d}}))" % (mode, quality, lgwin), data)
-`,
-)
-const hasBrotli = spawnSync('python3', ['-c', 'import brotli'], { stdio: 'ignore' }).status === 0
-
 function subset(input: string, unicodes: Set<number>, output: string) {
-  const result = spawnSync(
-    'python3',
-    ['-m', 'fontTools.subset', input, `--unicodes=${range(unicodes)}`, '--flavor=woff2', `--output-file=${output}`, '--layout-features=*', '--name-IDs=*', '--notdef-outline'],
-    { env: { ...process.env, PYTHONPATH: hasBrotli ? (process.env.PYTHONPATH ?? '') : shim }, encoding: 'utf8' },
-  )
-  if (result.status !== 0) throw new Error(`fontTools couldn't subset ${input}:\n${result.stderr || result.error}`)
+  python(['-m', 'fontTools.subset', input, `--unicodes=${range(unicodes)}`, '--flavor=woff2', `--output-file=${output}`, '--layout-features=*', '--name-IDs=*', '--notdef-outline'], `subset ${input}`)
 }
 
 // --- Out ---

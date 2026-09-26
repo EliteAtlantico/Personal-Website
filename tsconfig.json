@@ -10,7 +10,8 @@
     "verbatimModuleSyntax": true,
     "isolatedModules": true,
     "skipLibCheck": true,
-    "noEmit": true
+    "noEmit": true,
+    "allowImportingTsExtensions": true
   },
-  "include": ["src", "scripts", "server", "edge", "perf", "security", "vite.config.ts"]
+  "include": ["src", "scripts", "server", "edge", "perf", "security", "a11y", "vite.config.ts"]
 }
